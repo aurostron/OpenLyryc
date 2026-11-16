@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenLyryc — Hand-Drawn Achievement Stickers Sheet</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <style>
+    :root {
+      --bg: #08080a;
+      --card-bg: #121217;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f4f4f5;
+      --subtext: #a1a1aa;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      padding: 48px 24px;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header { margin-bottom: 40px; border-b: 1px solid var(--border); padding-bottom: 24px; }
+    h1 { font-size: 32px; font-weight: 300; letter-spacing: -0.02em; margin-bottom: 8px; }
+    p.lead { color: var(--subtext); font-size: 15px; }
+    .actions { margin-top: 16px; display: flex; gap: 12px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: #ffffff;
+      color: #09090b;
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      border-radius: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: #ffffff;
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      margin-top: 32px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+    .sticker-preview {
+      width: 72px;
+      height: 72px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid;
+    }
+    .sticker-preview svg { width: 44px; height: 44px; }
+    .badge-number { font-family: monospace; font-size: 11px; color: var(--subtext); text-transform: uppercase; }
+    .badge-title { font-size: 16px; font-weight: 600; color: #ffffff; margin-top: 2px; }
+    .badge-desc { font-size: 12px; color: var(--subtext); margin-top: 6px; line-height: 1.4; }
+    .badge-visual { font-family: monospace; font-size: 11px; margin-top: 10px; color: #71717a; }
+    .guidelines {
+      margin-top: 60px;
+      padding: 28px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+    }
+    .guidelines h2 { font-size: 18px; font-weight: 500; margin-bottom: 12px; }
+    .guidelines ul { margin-left: 20px; color: var(--subtext); font-size: 13px; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>OpenLyryc — Achievement Stickers Sheet</h1>
+      <p class="lead">12 hand-drawn vector sticker specifications for artist redraw and design inspiration.</p>
+      <div class="actions">
+        <a href="/achievements-sticker-sheet.svg" download="openlyryc-stickers-sheet.svg" class="btn">
+          ⬇ Download Vector Sheet (SVG)
+        </a>
+        <a href="/@aurostron" class="btn btn-secondary">
+          ← Back to @aurostron Profile
+        </a>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- 1 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.25); color: #fcd34d;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <path d="M18 56 L18 10 M18 12 C26 7 34 17 44 11 C47 9 49 10 49 10 L49 32 C41 38 33 28 22 34 C19 35 18 34 18 34" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M33 20 L34.5 23.5 L38 24 L35.5 26.5 L36 30 L33 28 L30 30 L30.5 26.5 L28 24 L31.5 23.5 Z" fill="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+            <path d="M10 56 Q18 52 26 56 Q36 50 54 56" stroke-width="3" stroke-linecap="round" />
+            <path d="M50 16 L50 22 M47 19 L53 19" stroke-width="2.5" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#01 · Milestone</span>
+          <h3 class="badge-title">The First Pioneer</h3>
+          <p class="badge-desc">Claimed the very first @username on OpenLyryc and laid the cornerstone.</p>
+          <p class="badge-visual">Prompt: Flag planted on mountain peak with star and summit rocks.</p>
+        </div>
+      </div>
+
+      <!-- 2 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); color: #6ee7b7;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <rect x="10" y="28" width="44" height="18" rx="5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M12 40 L52 40" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 3" />
+            <path d="M22 20 L24 24 M32 15 L32 23 M42 20 L40 24" stroke-width="2.5" stroke-linecap="round" />
+            <path d="M27 37 L37 37" stroke-width="3" stroke-linecap="round" />
+            <path d="M32 11 Q32 20 32 26" stroke-width="3" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#02 · Craft</span>
+          <h3 class="badge-title">Spacebar Ninja</h3>
+          <p class="badge-desc">Tapped Space over 1,000 times with laser timing without spilling tea.</p>
+          <p class="badge-visual">Prompt: Mechanical keyboard spacebar key with speed lines and sparks.</p>
+        </div>
+      </div>
+
+      <!-- 3 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.25); color: #fda4af;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <path d="M32 20 C26 14 16 16 15 28 C14 42 27 52 32 52 C37 52 50 42 49 28 C48 16 38 14 32 20 Z" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M32 20 Q34 10 42 8 L42 16" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M26 34 L30 38 L38 28" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#03 · Craft</span>
+          <h3 class="badge-title">Apple Music Perfectionist</h3>
+          <p class="badge-desc">Exported pixel-perfect Apple Music TTML with syllable splits and vocal flourishes.</p>
+          <p class="badge-visual">Prompt: Apple silhouette with musical note stem and clean checkmark.</p>
+        </div>
+      </div>
+
+      <!-- 4 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.25); color: #a5b4fc;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <path d="M38 12 C24 14 16 26 18 40 C20 50 30 56 42 52 C30 50 26 34 32 24 C34 20 37 16 38 12 Z" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M20 28 C16 16 42 14 44 26" stroke-width="3" stroke-linecap="round" />
+            <rect x="15" y="26" width="6" height="12" rx="3" stroke-width="2.5" fill="currentColor" />
+            <rect x="43" y="24" width="6" height="12" rx="3" stroke-width="2.5" fill="currentColor" />
+            <path d="M48 12 L54 12 L48 18 L54 18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#04 · Dedication</span>
+          <h3 class="badge-title">Midnight Jammer</h3>
+          <p class="badge-desc">Timed lyrics past 2:00 AM because the track was hitting too hard.</p>
+          <p class="badge-visual">Prompt: Crescent moon wearing over-ear studio headphones.</p>
+        </div>
+      </div>
+
+      <!-- 5 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(6, 182, 212, 0.1); border-color: rgba(6, 182, 212, 0.25); color: #67e8f9;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <circle cx="24" cy="24" r="10" stroke-width="3" />
+            <circle cx="24" cy="24" r="4" stroke-width="2" />
+            <path d="M32 30 L48 46" stroke-width="3" stroke-linecap="round" />
+            <path d="M42 40 L46 36 M46 44 L50 40" stroke-width="3" stroke-linecap="round" />
+            <path d="M12 18 L8 16 M20 10 L18 6" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#05 · Milestone</span>
+          <h3 class="badge-title">WebCrypto Key</h3>
+          <p class="badge-desc">Cryptographically registered and signed submissions to the immutable Unison catalog.</p>
+          <p class="badge-visual">Prompt: Vintage skeleton key with cryptographic circular bit and sparkles.</p>
+        </div>
+      </div>
+
+      <!-- 6 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.25); color: #c4b5fd;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <circle cx="32" cy="32" r="22" stroke-width="3" />
+            <circle cx="32" cy="32" r="13" stroke-width="2.5" stroke-dasharray="4 3" />
+            <circle cx="32" cy="32" r="4" fill="currentColor" />
+            <path d="M48 14 L34 28 M48 14 L42 15 M48 14 L47 20" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#06 · Craft</span>
+          <h3 class="badge-title">Zero Drift</h3>
+          <p class="badge-desc">Timed 70+ lyric lines with less than 30ms offset from audio transients.</p>
+          <p class="badge-visual">Prompt: Archery bullseye target with arrow hitting dead center.</p>
+        </div>
+      </div>
+
+      <!-- 7 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.25); color: #fdba74;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <path d="M16 24 L20 48 C20 52 40 52 40 48 L44 24 Z" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M42 28 C50 28 50 40 40 42" stroke-width="3" stroke-linecap="round" />
+            <path d="M24 18 C22 14 26 12 24 8 M32 18 C30 14 34 12 32 8" stroke-width="2.5" stroke-linecap="round" />
+            <path d="M38 10 L42 9 L42 15 M42 15 A2 2 0 1 1 38 15 A2 2 0 0 1 42 15" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#07 · Craft</span>
+          <h3 class="badge-title">Syllable Surgeon</h3>
+          <p class="badge-desc">Split complex multi-syllabic words for smooth karaoke scrolling.</p>
+          <p class="badge-visual">Prompt: Steaming ceramic coffee mug with musical steam coils.</p>
+        </div>
+      </div>
+
+      <!-- 8 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.25); color: #93c5fd;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <rect x="24" y="12" width="16" height="24" rx="8" stroke-width="3" stroke-linecap="round" />
+            <path d="M25 22 L39 22 M25 28 L39 28 M32 12 L32 36" stroke-width="2" stroke-linecap="round" />
+            <path d="M18 24 C18 36 46 36 46 24" stroke-width="3" stroke-linecap="round" />
+            <path d="M32 36 L32 52 M22 52 L42 52" stroke-width="3" stroke-linecap="round" />
+            <path d="M12 20 C10 24 10 28 12 32 M52 20 C54 24 54 28 52 32" stroke-width="2.5" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#08 · Milestone</span>
+          <h3 class="badge-title">Mic Check 1-2</h3>
+          <p class="badge-desc">Loaded your first stems and calibrated your playback latency like an engineer.</p>
+          <p class="badge-visual">Prompt: Vintage capsule mic with shockmount cradle and sound ripples.</p>
+        </div>
+      </div>
+
+      <!-- 9 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(236, 72, 153, 0.1); border-color: rgba(236, 72, 153, 0.25); color: #f472b6;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <circle cx="32" cy="32" r="22" stroke-width="3" />
+            <circle cx="32" cy="32" r="16" stroke-width="1.5" stroke-dasharray="6 4" />
+            <circle cx="32" cy="32" r="9" stroke-width="2" />
+            <path d="M32 30 C30 27 27 28 27 30 C27 33 32 36 32 36 C32 36 37 33 37 30 C37 28 34 27 32 30 Z" fill="currentColor" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#09 · Milestone</span>
+          <h3 class="badge-title">Crowd Favorite</h3>
+          <p class="badge-desc">Authored lyrics for heavy hitters: Atif Aslam (Tu Jaane Na) & Modjo (Lady).</p>
+          <p class="badge-visual">Prompt: Vinyl record grooves with a sweet heart center label.</p>
+        </div>
+      </div>
+
+      <!-- 10 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(234, 179, 8, 0.1); border-color: rgba(234, 179, 8, 0.25); color: #fde047;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <rect x="12" y="20" width="16" height="24" rx="4" stroke-width="2.5" />
+            <rect x="36" y="20" width="16" height="24" rx="4" stroke-width="2.5" />
+            <path d="M16 32 L24 32 M40 32 L48 32" stroke-width="2" stroke-linecap="round" />
+            <path d="M32 10 L27 28 L35 28 L30 52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#10 · Craft</span>
+          <h3 class="badge-title">The Clean Cut</h3>
+          <p class="badge-desc">Separated overlapping vocal harmonies into two distinct timed lines.</p>
+          <p class="badge-visual">Prompt: Syllable blocks divided by a clean lightning split.</p>
+        </div>
+      </div>
+
+      <!-- 11 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(20, 184, 166, 0.1); border-color: rgba(20, 184, 166, 0.25); color: #5eead4;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <path d="M14 34 C14 26 24 24 32 32 C40 40 50 38 50 30 C50 22 40 24 32 32 C24 40 14 38 14 34 Z" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="22" cy="28" r="1.5" fill="currentColor" />
+            <circle cx="42" cy="36" r="1.5" fill="currentColor" />
+            <path d="M28 16 C30 14 34 14 36 16 M28 48 C30 50 34 50 36 48" stroke-width="2.5" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#11 · Dedication</span>
+          <h3 class="badge-title">In The Groove</h3>
+          <p class="badge-desc">Maintained sync focus for over 30 minutes without hitting undo once.</p>
+          <p class="badge-visual">Prompt: Infinity wave loop with sound pulsations.</p>
+        </div>
+      </div>
+
+      <!-- 12 -->
+      <div class="card">
+        <div class="sticker-preview" style="background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.25); color: #fde68a;">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor">
+            <path d="M14 44 L18 22 L26 32 L32 16 L38 32 L46 22 L50 44 Z" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M14 44 L50 44 L48 50 L16 50 Z" stroke-width="2.5" stroke-linejoin="round" />
+            <circle cx="24" cy="47" r="1.5" fill="currentColor" />
+            <circle cx="32" cy="47" r="1.5" fill="currentColor" />
+            <circle cx="40" cy="47" r="1.5" fill="currentColor" />
+            <circle cx="32" cy="14" r="2" fill="currentColor" />
+          </svg>
+        </div>
+        <div>
+          <span class="badge-number">#12 · Milestone</span>
+          <h3 class="badge-title">Catalog Master</h3>
+          <p class="badge-desc">Curated submissions across multiple formats and languages in the archive.</p>
+          <p class="badge-visual">Prompt: Royal crown with audio equalizer peaks and gem insets.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="guidelines">
+      <h2>Creative Brief & Notes for the Illustrator / Redraw Artist</h2>
+      <ul>
+        <li><strong>Style:</strong> Hand-drawn, loose, organic doodle stickers (like sketches inside a musician's lyric notebook).</li>
+        <li><strong>Linework:</strong> Uniform 2.5px to 3.5px stroke width with rounded ends (<code>stroke-linecap: round</code>).</li>
+        <li><strong>Grid:</strong> Each sticker is constructed within a <code>viewBox="0 0 64 64"</code> bounding box so it scales cleanly to any resolution.</li>
+        <li><strong>Colors:</strong> Designed for dark mode (`#08080a`), each with an accent tint (amber, emerald, rose, indigo, cyan, violet, orange, blue, pink, yellow, teal, gold).</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

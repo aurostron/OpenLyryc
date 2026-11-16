@@ -1,0 +1,9 @@
+{
+  "id": "announcement-2026-11-02",
+  "enabled": true,
+  "title": "",
+  "message": "Hey! Thanks for trying out OpenLyryc ahead of it's public release.",
+  "urgent": false,
+  "normal": true,
+  "downtime": false
+}

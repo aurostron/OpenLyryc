@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenLyryc API Reference</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0c0c0f;
+      }
+      /* Suppress any promotional toolbars or modals while preserving Powered by Scalar */
+      .developer-tools,
+      [data-testid="developer-tools"],
+      [data-testid="ask-ai"],
+      .scalar-agent-button {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <script
+      id="api-reference"
+      type="application/json"
+      data-configuration='{
+        "theme": "deepSpace",
+        "darkMode": true,
+        "layout": "modern",
+        "hideModels": false,
+        "searchHotKey": "k",
+        "showDeveloperTools": "never",
+        "agent": {
+          "disabled": true
+        },
+        "metaData": {
+          "title": "OpenLyryc API Reference"
+        },
+        "spec": {
+          "url": "/openapi.json"
+        }
+      }'>
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  </body>
+</html>

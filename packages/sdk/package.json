@@ -1,0 +1,16 @@
+{
+  "name": "@openlyryc/sdk",
+  "version": "1.0.0",
+  "description": "Universal cross-platform SDK for OpenLyryc — embedding synchronized cinema & kinetic lyrics into Android, Tauri, Rust, Web, and Native music players.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "node ../../node_modules/typescript/lib/tsc.js --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@openlyryc/schema": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

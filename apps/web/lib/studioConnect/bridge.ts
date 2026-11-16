@@ -1,0 +1,219 @@
+/**
+ * The Studio <-> Studio Connect bridge contract. This is a small protocol
+ * shared with the companion extension, trimmed to the YouTube Music session
+ * and the InnerTube proxy the Studio player needs. Keep BRIDGE_CHANNEL,
+ * BRIDGE_PROTOCOL and EVENTS_PORT in sync with the extension: they are how the
+ * two sides find each other.
+ */
+
+/** Bumped on any breaking change to an envelope or a method's shape. */
+export const BRIDGE_PROTOCOL = 1;
+
+/** Tags every window message so the relay ignores everything else on the page. */
+export const BRIDGE_CHANNEL = 'openlyryc-connect';
+
+/** The long-lived port the extension pushes `BridgeEvent`s on. */
+export const EVENTS_PORT = 'openlyryc-connect-events';
+
+/** What the installed extension can do; `ping` reports it. */
+export type Capability = 'yt' | 'yt.auth' | 'yt.search';
+
+export type BrowserFamily = 'chromium' | 'firefox';
+
+/** A plain HTTP exchange, serialisable across the message channel. */
+export interface HttpRequest {
+  url: string;
+  method?: 'GET' | 'POST' | 'HEAD';
+  headers?: Record<string, string>;
+  /** Text bodies as-is; binary bodies base64-encoded with `bodyEncoding: 'base64'`. */
+  body?: string;
+  bodyEncoding?: 'text' | 'base64';
+}
+
+export interface HttpResponse {
+  status: number;
+  headers: Record<string, string>;
+  /** UTF-8 text, or base64 when `bodyEncoding` is `'base64'`. */
+  body: string;
+  bodyEncoding: 'text' | 'base64';
+  /** The final URL after redirects. */
+  url: string;
+}
+
+/** One identity requests can act as: a Google login's own channel, or one of its brand channels. */
+export interface YtChannel {
+  /** Opaque and stable: what `yt.selectChannel` takes. */
+  id: string;
+  name: string;
+  /** The @handle or byline YouTube shows under the name. */
+  handle: string | null;
+  avatarUrl: string | null;
+  /** A brand channel (sent as `X-Goog-PageId`) rather than the login's own. */
+  brand: boolean;
+}
+
+/** A Google login in the browser's cookie jar, as `X-Goog-AuthUser` addresses it. */
+export interface YtAccount {
+  authUser: string;
+  name: string;
+  email: string | null;
+  avatarUrl: string | null;
+  channels: YtChannel[];
+}
+
+/**
+ * Who signed-in YouTube requests act as. Names and pictures only: the
+ * cookies and the signature never leave the extension.
+ */
+export interface YtAuthState {
+  /** The browser holds a YouTube session (a SAPISID cookie). */
+  browserSignedIn: boolean;
+  /** The user lets OpenLyryc use it; "Disconnect" turns this off without signing out of Google. */
+  connected: boolean;
+  /** True when signed-in requests will be made: signed in, connected, and a channel chosen. */
+  signedIn: boolean;
+  accounts: YtAccount[];
+  /** The channel in use, from `accounts`; null when not signed in. */
+  active: (YtChannel & { authUser: string }) | null;
+  /** Signed in to the browser but no account could be read: what YouTube answered, for display. */
+  problem: string | null;
+}
+
+/** Pushed by the extension over the event channel (`Bridge.subscribe`). */
+export type BridgeEvent = { event: 'yt.authState'; data: YtAuthState };
+
+/** A signed-in request is the same exchange with `auth` set; the extension adds the session. */
+export interface YtFetchParams extends HttpRequest {
+  /** Send it as the chosen channel (cookies, SAPISIDHASH, X-Goog-AuthUser/PageId). */
+  auth?: boolean;
+}
+
+/**
+ * YouTube Music's own label for a search row. `ATV` is the audio track
+ * (the Topic/static-cover upload), `OMV` the official music video, `UGC` a
+ * user upload. WEB search results don't carry it.
+ */
+export type YtMusicVideoType =
+  | 'MUSIC_VIDEO_TYPE_ATV'
+  | 'MUSIC_VIDEO_TYPE_OMV'
+  | 'MUSIC_VIDEO_TYPE_UGC'
+  | (string & {});
+
+/** One raw YouTube Music search row, before the page ranks it. */
+export interface YtSearchCandidate {
+  videoId: string;
+  title: string;
+  /** The row's second line (artist, or the uploader for UGC rows). */
+  channelTitle: string;
+  durationSeconds: number;
+  musicVideoType: YtMusicVideoType | null;
+}
+
+export interface YtSearchParams {
+  query: string;
+  /** Expected duration; ranking happens in the page, which knows the track. */
+  duration?: number;
+}
+
+export interface YtSearchResults {
+  query: string;
+  candidates: YtSearchCandidate[];
+}
+
+export interface BridgeMethods {
+  ping: {
+    params: Record<string, never>;
+    result: {
+      /** The extension's own version, from its manifest. */
+      version: string;
+      protocol: number;
+      browser: BrowserFamily;
+      capabilities: Capability[];
+    };
+  };
+  'yt.fetch': { params: YtFetchParams; result: HttpResponse };
+  /** YouTube Music search through the signed session (WEB_REMIX), raw rows. */
+  'yt.search': { params: YtSearchParams; result: YtSearchResults };
+  /** `refresh` re-reads the accounts from YouTube instead of the extension's short cache. */
+  'yt.authState': { params: { refresh?: boolean }; result: YtAuthState };
+  'yt.selectChannel': { params: { channelId: string }; result: YtAuthState };
+  'yt.setConnected': { params: { connected: boolean }; result: YtAuthState };
+}
+
+export type BridgeMethod = keyof BridgeMethods;
+export type ParamsOf<M extends BridgeMethod> = BridgeMethods[M]['params'];
+export type ResultOf<M extends BridgeMethod> = BridgeMethods[M]['result'];
+
+export interface BridgeRequest<M extends BridgeMethod = BridgeMethod> {
+  channel: typeof BRIDGE_CHANNEL;
+  protocol: number;
+  direction: 'to-extension';
+  id: string;
+  method: M;
+  params: ParamsOf<M>;
+}
+
+export type BridgeErrorCode =
+  | 'unsupported'
+  | 'forbidden'
+  | 'protocol'
+  | 'network'
+  | 'unauthenticated'
+  | 'permission'
+  | 'internal';
+
+export interface BridgeError {
+  code: BridgeErrorCode;
+  message: string;
+}
+
+export type BridgeResponse<M extends BridgeMethod = BridgeMethod> = {
+  channel: typeof BRIDGE_CHANNEL;
+  protocol: number;
+  direction: 'to-page';
+  id: string;
+} & ({ ok: true; result: ResultOf<M> } | { ok: false; error: BridgeError });
+
+export function isBridgeRequest(value: unknown): value is BridgeRequest {
+  const v = value as Partial<BridgeRequest> | null;
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    v.channel === BRIDGE_CHANNEL &&
+    v.direction === 'to-extension' &&
+    typeof v.id === 'string' &&
+    typeof v.method === 'string'
+  );
+}
+
+/** An event as the Firefox relay forwards it to the page. */
+export interface BridgeEventMessage {
+  channel: typeof BRIDGE_CHANNEL;
+  direction: 'event';
+  payload: BridgeEvent;
+}
+
+export function isBridgeEventMessage(value: unknown): value is BridgeEventMessage {
+  const v = value as Partial<BridgeEventMessage> | null;
+  return typeof v === 'object' && v !== null && v.channel === BRIDGE_CHANNEL && v.direction === 'event' && !!v.payload;
+}
+
+export function isBridgeResponse(value: unknown): value is BridgeResponse {
+  const v = value as Partial<BridgeResponse> | null;
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    v.channel === BRIDGE_CHANNEL &&
+    v.direction === 'to-page' &&
+    typeof v.id === 'string' &&
+    typeof v.ok === 'boolean'
+  );
+}
+
+export function okResponse<M extends BridgeMethod>(id: string, result: ResultOf<M>): BridgeResponse<M> {
+  return { channel: BRIDGE_CHANNEL, protocol: BRIDGE_PROTOCOL, direction: 'to-page', id, ok: true, result };
+}
+
+export function errorResponse(id: string, code: BridgeErrorCode, message: string): BridgeResponse {
+  return { channel: BRIDGE_CHANNEL, protocol: BRIDGE_PROTOCOL, direction: 'to-page', id, ok: false, error: { code, message } };
+}

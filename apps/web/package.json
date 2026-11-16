@@ -1,0 +1,52 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node dev-runner.mjs",
+    "dev:proxy": "node ../../scripts/yt-proxy.mjs",
+    "build": "next build --webpack",
+    "start": "node ../../scripts/dev-server.mjs",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@kawarp/react": "^1.3.1",
+    "@libsql/client": "^0.17.4",
+    "@lit/react": "^1.0.8",
+    "@tauri-apps/api": "^2.12.3",
+    "@uimaxbai/am-lyrics": "^1.8.9",
+    "bgutils-js": "^4.0.3",
+    "clsx": "^2.1.1",
+    "dexie": "^4.4.6",
+    "framer-motion": "^12.43.0",
+    "googlevideo": "^4.1.1",
+    "lucide-react": "^1.28.0",
+    "lz-string": "^1.5.0",
+    "next": "16.2.12",
+    "pako": "^3.0.1",
+    "playwright": "^1.62.1",
+    "qrcode": "^1.5.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "shaka-player": "^4.16.56",
+    "tailwind-merge": "^3.6.0",
+    "trystero": "^0.26.0",
+    "wavesurfer.js": "^7.12.11",
+    "y-webrtc": "^10.3.0",
+    "yjs": "^13.6.32",
+    "youtubei.js": "^18.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/lz-string": "^1.3.34",
+    "@types/node": "^20",
+    "@types/pako": "^2.0.4",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.12",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

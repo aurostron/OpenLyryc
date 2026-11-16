@@ -1,0 +1,954 @@
+import { Hono } from 'hono';
+
+export const openapiRouter = new Hono();
+
+export const OPENAPI_SPEC = {
+  openapi: '3.1.0',
+  info: {
+    title: 'OpenLyryc API Reference',
+    version: '1.2.0',
+    description: `Official Cloudflare Workers edge API for OpenLyryc — the open, synchronized lyrics infrastructure and web studio.
+
+### Key Capabilities:
+- **Synchronized Lyrics Engine**: Fast, reliable lyric resolution featuring millisecond line timestamps, syllable-level word tokens, and official cover artwork.
+- **Multiple Output Formats**: Retrieve lyrics in standard OpenLyrics JSON, enhanced syllable-synced LRC, Apple Music TTML XML, or compact delta format.
+- **Real-Time Transliteration**: Instant Japanese Kanji and Kana to Latin Romaji conversion directly on the edge for bilingual lyrics display.
+- **Unified Track Search**: Search tracks with automatic deduplication, prioritizing songs with verified word-level syllable synchronization.
+- **Fair Use Protection**: Automatic traffic smoothing and request queuing designed to keep the API fast, reliable, and available for all apps and players.
+- **Audio Reference Matching**: High-precision audio matching with duration alignment for reference audio and player synchronization.`,
+    contact: {
+      name: 'OpenLyryc Engineering',
+      url: 'https://openlyryc.pages.dev',
+      email: 'creator@openlyryc.dev',
+    },
+    license: {
+      name: 'MIT',
+      url: 'https://github.com/aurostron/openlyryc/blob/main/LICENSE',
+    },
+  },
+  servers: [
+    {
+      url: 'https://openlyryc.pages.dev',
+      description: 'Production Public Gateway (Cloudflare Pages)',
+    },
+    {
+      url: 'https://openlyryc-core.aurostronyee1.workers.dev',
+      description: 'Production Edge Worker (Cloudflare Global Network)',
+    },
+  ],
+  tags: [
+    {
+      name: 'Lyrics',
+      description: 'Synchronized lyric resolution, syllable tokens, multi-format export (JSON, LRC, TTML), and catalog lookup.',
+    },
+    {
+      name: 'Search',
+      description: 'Unified search across tracks and synchronized lyrics with quality and sync fidelity ranking.',
+    },
+    {
+      name: 'Transliteration',
+      description: 'High-speed Japanese Kanji/Kana to Latin Hepburn Romaji transliteration.',
+    },
+    {
+      name: 'Deduplication',
+      description: 'Track deduplication verification and lyric fingerprinting.',
+    },
+    {
+      name: 'Revisions & Registry',
+      description: 'Community lyric submissions, revision history, and quality review voting.',
+    },
+    {
+      name: 'Audio & Streams',
+      description: 'Reference audio candidate matching and streaming track resolution.',
+    },
+    {
+      name: 'System',
+      description: 'Operational health status and content review notices.',
+    },
+  ],
+  components: {
+    securitySchemes: {
+      DeviceHeader: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'X-OpenLyryc-Device-Id',
+        description: 'Optional unique client or app identifier. Ensures independent fair-use allocation across devices on shared networks.',
+      },
+      TurnstileToken: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'X-Turnstile-Token',
+        description: 'Security verification token for lyric publishing.',
+      },
+    },
+    headers: {
+      'X-RateLimit-Limit': {
+        description: 'Fair-use rate limit quota for the current window.',
+        schema: { type: 'integer', example: 3 },
+      },
+      'X-RateLimit-Remaining': {
+        description: 'Remaining requests available in the current window.',
+        schema: { type: 'integer', example: 3 },
+      },
+      'X-RateLimit-Reset': {
+        description: 'Seconds until the quota window resets.',
+        schema: { type: 'integer', example: 1 },
+      },
+      'X-RateLimit-Queue-Delay': {
+        description: 'Fair-use traffic smoothing delay applied during burst traffic.',
+        schema: { type: 'string', example: '0ms' },
+      },
+      'X-RateLimit-Client-Type': {
+        description: 'Fair-use identifier tier (device or network).',
+        schema: { type: 'string', enum: ['device', 'ip'], example: 'device' },
+      },
+      'Retry-After': {
+        description: 'Recommended wait time in seconds when throttled.',
+        schema: { type: 'integer', example: 5 },
+      },
+    },
+    schemas: {
+      SyllableToken: {
+        type: 'object',
+        description: 'Word- or syllable-level timing token.',
+        required: ['text', 'start', 'end'],
+        properties: {
+          text: { type: 'string', example: 'Waiting' },
+          start: { type: 'number', description: 'Start time in seconds.', example: 12.45 },
+          end: { type: 'number', description: 'End time in seconds.', example: 13.1 },
+        },
+      },
+      LyricLine: {
+        type: 'object',
+        description: 'Synchronized lyric line with optional syllable tokens and background vocal tag.',
+        required: ['id', 'text', 'start', 'end'],
+        properties: {
+          id: { type: 'string', example: 'line_1' },
+          text: { type: 'string', example: 'Waiting in a car' },
+          start: { type: 'number', description: 'Line start time in seconds.', example: 12.45 },
+          end: { type: 'number', description: 'Line end time in seconds.', example: 15.2 },
+          isBackground: { type: 'boolean', description: 'Whether this line represents background vocals.', example: false },
+          tokens: {
+            type: 'array',
+            description: 'Word- or syllable-level timing tokens.',
+            items: { $ref: '#/components/schemas/SyllableToken' },
+          },
+          translations: {
+            type: 'object',
+            description: 'Translations or original text archived when transliterated.',
+            additionalProperties: { type: 'string' },
+            example: { ja: '車の中で待っている' },
+          },
+        },
+      },
+      OpenLyricsDocument: {
+        type: 'object',
+        description: 'Standard OpenLyrics synchronized document schema.',
+        required: ['$schema', 'version', 'metadata', 'lines'],
+        properties: {
+          $schema: { type: 'string', example: 'https://openlyrics.dev/schema/v1.json' },
+          version: { type: 'integer', example: 1 },
+          metadata: {
+            type: 'object',
+            required: ['title', 'artist'],
+            properties: {
+              title: { type: 'string', example: 'Midnight City' },
+              artist: { type: 'string', example: 'M83' },
+              album: { type: 'string', example: "Hurry Up, We're Dreaming" },
+              duration: { type: 'number', example: 243 },
+              syncedBy: { type: 'string', example: 'OpenLyryc Global Engine' },
+              precisionMode: { type: 'boolean', example: true },
+              coverArt: { type: 'string', format: 'uri', example: 'https://is1-ssl.mzstatic.com/image/thumb/.../500x500bb.jpg' },
+              canonicalKey: { type: 'string', example: 'lrc_m83_midnightcity' },
+              lyricsSimhash: { type: 'string', example: 'a9b2c3d4e5f60718' },
+            },
+          },
+          lines: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/LyricLine' },
+          },
+        },
+      },
+      SongSearchResult: {
+        type: 'object',
+        required: ['id', 'title', 'artist', 'hasWordSync', 'hasLineSync', 'source', 'qualityScore'],
+        properties: {
+          id: { type: 'string', example: 's_m83_midnight' },
+          title: { type: 'string', example: 'Midnight City' },
+          artist: { type: 'string', example: 'M83' },
+          album: { type: 'string', example: "Hurry Up, We're Dreaming" },
+          duration: { type: 'integer', example: 243 },
+          hasWordSync: { type: 'boolean', description: 'Whether word-level syllable tokens are available.', example: true },
+          hasLineSync: { type: 'boolean', description: 'Whether timestamped lines are available.', example: true },
+          source: { type: 'string', enum: ['openlyryc', 'community', 'verified', 'youtube'], example: 'verified' },
+          qualityScore: { type: 'number', description: 'Calculated quality score from 0.0 to 1.0.', example: 0.98 },
+          coverArt: { type: 'string', format: 'uri', example: 'https://is1-ssl.mzstatic.com/image/thumb/.../500x500bb.jpg' },
+          revisionHash: { type: 'string', example: '0x3a9f81b2c4' },
+          updatedAt: { type: 'string', format: 'date-time', example: '2026-10-16T18:00:00.000Z' },
+        },
+      },
+      TransliterateResponse: {
+        type: 'object',
+        required: ['text', 'romaji', 'language'],
+        properties: {
+          text: { type: 'string', example: '心臓を捧げよ' },
+          romaji: { type: 'string', example: 'shinzou o sasage yo' },
+          language: { type: 'string', example: 'ja-Latn' },
+        },
+      },
+      RateLimitError: {
+        type: 'object',
+        required: ['error', 'message', 'retryAfter'],
+        properties: {
+          error: { type: 'string', example: 'Too Many Requests' },
+          message: { type: 'string', example: 'Fair use rate limit reached. Please slow down.' },
+          retryAfter: { type: 'integer', example: 5 },
+        },
+      },
+    },
+  },
+  paths: {
+    '/api/v1/health': {
+      get: {
+        tags: ['System'],
+        summary: 'Edge Node Health Check',
+        description: 'Returns operational status, uptime timestamp, and active Cloudflare Edge Worker metadata.',
+        operationId: 'getHealth',
+        responses: {
+          '200': {
+            description: 'Edge worker is operational.',
+            headers: {
+              'X-RateLimit-Limit': { $ref: '#/components/headers/X-RateLimit-Limit' },
+              'X-RateLimit-Remaining': { $ref: '#/components/headers/X-RateLimit-Remaining' },
+              'X-RateLimit-Queue-Delay': { $ref: '#/components/headers/X-RateLimit-Queue-Delay' },
+            },
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['status', 'service', 'timestamp'],
+                  properties: {
+                    status: { type: 'string', example: 'ok' },
+                    service: { type: 'string', example: 'OpenLyrics Cloudflare Edge Worker API' },
+                    timestamp: { type: 'string', format: 'date-time', example: '2026-10-16T18:00:00.000Z' },
+                  },
+                },
+              },
+            },
+          },
+          '429': {
+            description: 'Fair use rate limit reached.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/RateLimitError' } } },
+          },
+        },
+      },
+    },
+    '/api/v1/lyrics': {
+      get: {
+        tags: ['Lyrics'],
+        summary: 'Resolve Synchronized Lyrics',
+        description: `Resolves synchronized lyrics with millisecond line timestamps, word-level syllable tokens, and album artwork across global verified sources.
+Supports multiple export formats (\`json\`, \`lrc\`, \`ttml\`, \`compact\`) and automatic Japanese Romaji transliteration.`,
+        operationId: 'resolveLyrics',
+        parameters: [
+          {
+            name: 'title',
+            in: 'query',
+            required: false,
+            description: 'Song title (e.g. "Viva La Vida").',
+            schema: { type: 'string', example: 'Viva La Vida' },
+          },
+          {
+            name: 'artist',
+            in: 'query',
+            required: false,
+            description: 'Artist or band name (e.g. "Coldplay").',
+            schema: { type: 'string', example: 'Coldplay' },
+          },
+          {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Combined title and artist query string (e.g. "Coldplay - Viva La Vida").',
+            schema: { type: 'string', example: 'Coldplay - Viva La Vida' },
+          },
+          {
+            name: 'duration',
+            in: 'query',
+            required: false,
+            description: 'Expected track duration in seconds for timing alignment.',
+            schema: { type: 'number', example: 242 },
+          },
+          {
+            name: 'format',
+            in: 'query',
+            required: false,
+            description: 'Output format: "json" (standard OpenLyrics schema), "lrc" (enhanced syllable LRC), "ttml" (Apple Music TTML XML), or "compact" (delta-compressed JSON).',
+            schema: { type: 'string', enum: ['json', 'lrc', 'ttml', 'compact'], default: 'json' },
+          },
+          {
+            name: 'transliterate',
+            in: 'query',
+            required: false,
+            description: 'Set to "romaji" to automatically transliterate Japanese Kanji/Kana to Latin Romaji on lines and syllable tokens.',
+            schema: { type: 'string', enum: ['romaji', 'none'], default: 'none' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Synchronized lyrics document resolved successfully.',
+            headers: {
+              'X-RateLimit-Limit': { $ref: '#/components/headers/X-RateLimit-Limit' },
+              'X-RateLimit-Remaining': { $ref: '#/components/headers/X-RateLimit-Remaining' },
+              'X-RateLimit-Queue-Delay': { $ref: '#/components/headers/X-RateLimit-Queue-Delay' },
+            },
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/OpenLyricsDocument' },
+              },
+              'text/plain': {
+                schema: {
+                  type: 'string',
+                  example: '[ti:Viva La Vida]\n[ar:Coldplay]\n[00:15.50]<00:15.50>I<00:15.80>used<00:16.10>to<00:16.30>rule<00:16.70>the<00:17.00>world',
+                },
+              },
+              'application/xml': {
+                schema: {
+                  type: 'string',
+                  example: '<?xml version="1.0" encoding="utf-8"?>\n<tt xmlns="http://www.w3.org/ns/ttml" ...> ... </tt>',
+                },
+              },
+            },
+          },
+          '400': { description: 'Missing required query parameters (provide title and artist, or q).' },
+          '404': { description: 'No synchronized lyrics found for the requested song.' },
+          '429': {
+            description: 'Fair use rate limit reached.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/RateLimitError' } } },
+          },
+        },
+      },
+    },
+    '/api/v1/lyrics/{id}': {
+      get: {
+        tags: ['Lyrics'],
+        summary: 'Get Lyrics by Song ID',
+        description: 'Retrieves a stored lyric document directly by its unique song ID or canonical key. Supports multiple export formats and Romaji transliteration.',
+        operationId: 'getLyricsById',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Unique song ID or canonical key.',
+            schema: { type: 'string', example: 's_m83_midnight' },
+          },
+          {
+            name: 'format',
+            in: 'query',
+            required: false,
+            description: 'Output format: "json", "lrc", "ttml", or "compact".',
+            schema: { type: 'string', enum: ['json', 'lrc', 'ttml', 'compact'], default: 'json' },
+          },
+          {
+            name: 'transliterate',
+            in: 'query',
+            required: false,
+            description: 'Transliteration mode ("romaji").',
+            schema: { type: 'string', enum: ['romaji', 'none'] },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Lyrics document returned successfully.',
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/OpenLyricsDocument' } },
+              'text/plain': { schema: { type: 'string' } },
+              'application/xml': { schema: { type: 'string' } },
+            },
+          },
+          '404': { description: 'Song ID not found.' },
+          '429': { description: 'Fair use rate limit reached.' },
+        },
+      },
+    },
+    '/api/v1/lyrics/{id}/lrc': {
+      get: {
+        tags: ['Lyrics'],
+        summary: 'Export Enhanced LRC by Song ID',
+        description: 'Returns standard or enhanced word-level LRC text directly with Content-Type `text/plain; charset=utf-8`.',
+        operationId: 'exportLrcById',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Song ID.',
+            schema: { type: 'string', example: 's_m83_midnight' },
+          },
+          {
+            name: 'transliterate',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['romaji'] },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'LRC text file.',
+            content: { 'text/plain': { schema: { type: 'string' } } },
+          },
+          '404': { description: 'Song ID not found.' },
+        },
+      },
+    },
+    '/api/v1/lyrics/{id}/ttml': {
+      get: {
+        tags: ['Lyrics'],
+        summary: 'Export TTML XML by Song ID',
+        description: 'Returns official Apple Music TTML XML with `<p begin="..." end="...">` and `<span begin="..." end="...">` syllable tokens.',
+        operationId: 'exportTtmlById',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Song ID.',
+            schema: { type: 'string', example: 's_m83_midnight' },
+          },
+          {
+            name: 'transliterate',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['romaji'] },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Apple Music TTML XML.',
+            content: { 'application/xml': { schema: { type: 'string' } } },
+          },
+          '404': { description: 'Song ID not found.' },
+        },
+      },
+    },
+    '/api/v1/search': {
+      get: {
+        tags: ['Search'],
+        summary: 'Search Tracks & Lyrics',
+        description: 'Unified search across tracks and synchronized lyrics. Automatically deduplicates results and prioritizes songs with word-level syllable synchronization.',
+        operationId: 'searchSongs',
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Search query string (song title, artist, or album).',
+            schema: { type: 'string', example: 'Midnight City' },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Maximum number of results to return (1-50, default: 20).',
+            schema: { type: 'integer', default: 20, minimum: 1, maximum: 50 },
+          },
+          {
+            name: 'source',
+            in: 'query',
+            required: false,
+            description: 'Filter search source: "all" or "youtube".',
+            schema: { type: 'string', enum: ['all', 'youtube'], default: 'all' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Search results returned successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['query', 'total', 'results'],
+                  properties: {
+                    query: { type: 'string', example: 'Midnight City' },
+                    total: { type: 'integer', example: 12 },
+                    results: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/SongSearchResult' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '429': { description: 'Fair use rate limit reached.' },
+        },
+      },
+    },
+    '/api/v1/transliterate': {
+      get: {
+        tags: ['Transliteration'],
+        summary: 'Transliterate Japanese Text to Romaji (GET)',
+        description: 'Converts Japanese Kanji, Hiragana, and Katakana into Latin Romaji directly on the edge with sub-millisecond execution.',
+        operationId: 'transliterateGet',
+        parameters: [
+          {
+            name: 'text',
+            in: 'query',
+            required: true,
+            description: 'Japanese text to transliterate.',
+            schema: { type: 'string', example: '心臓を捧げよ' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Transliteration result.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/TransliterateResponse' },
+              },
+            },
+          },
+          '400': { description: 'Missing text parameter.' },
+          '429': { description: 'Fair use rate limit reached.' },
+        },
+      },
+      post: {
+        tags: ['Transliteration'],
+        summary: 'Transliterate Japanese Text to Romaji (POST)',
+        description: 'Accepts Japanese lyrics in a JSON body and returns Latin Romaji transliteration.',
+        operationId: 'transliteratePost',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['text'],
+                properties: {
+                  text: { type: 'string', example: '心臓を捧げよ\n全てを賭けて' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Transliteration result.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/TransliterateResponse' } } },
+          },
+          '400': { description: 'Missing text in body.' },
+          '429': { description: 'Fair use rate limit reached.' },
+        },
+      },
+    },
+    '/api/v1/dedup/check': {
+      post: {
+        tags: ['Deduplication'],
+        summary: 'Check Duplicate Lyric Documents',
+        description: 'Verifies incoming track submissions against existing catalog entries using canonical platform links and lyric fingerprinting.',
+        operationId: 'checkDuplicate',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  platform: { type: 'string', enum: ['spotify', 'youtube', 'apple', 'isrc'], example: 'youtube' },
+                  platformId: { type: 'string', example: 'v4xZUtTz0k4' },
+                  canonicalKey: { type: 'string', example: 'yt:v4xZUtTz0k4' },
+                  lyricsSimhash: { type: 'string', example: 'a9b2c3d4e5f60718' },
+                  title: { type: 'string', example: 'Bilionera' },
+                  artist: { type: 'string', example: 'Otilia' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Deduplication result.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['isDuplicate'],
+                  properties: {
+                    isDuplicate: { type: 'boolean', example: false },
+                    matchType: { type: 'string', enum: ['exact_platform', 'simhash_similar'], nullable: true },
+                    matchedSong: { $ref: '#/components/schemas/SongSearchResult' },
+                    message: { type: 'string', example: 'No duplicates found. Safe to publish.' },
+                  },
+                },
+              },
+            },
+          },
+          '429': { description: 'Fair use rate limit reached.' },
+        },
+      },
+    },
+    '/api/v1/revisions': {
+      post: {
+        tags: ['Revisions & Registry'],
+        summary: 'Publish Synchronized Lyric Revision',
+        description: 'Publishes a validated OpenLyrics document to the global registry with automated revision hashing and quality score calculation.',
+        operationId: 'createRevision',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['document'],
+                properties: {
+                  document: { $ref: '#/components/schemas/OpenLyricsDocument' },
+                  commitMessage: { type: 'string', example: 'Add syllable-level word timings for chorus' },
+                  authorHandle: { type: 'string', example: '0xVaporWave' },
+                  parentHash: { type: 'string', example: '0x0000000000' },
+                  allowMerge: { type: 'boolean', example: false },
+                  isVariant: { type: 'boolean', example: false },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Revision published successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['songId', 'revisionHash', 'status', 'qualityScore', 'createdAt'],
+                  properties: {
+                    songId: { type: 'string', example: 's_m83_midnight' },
+                    revisionHash: { type: 'string', example: '0x3a9f81b2c4' },
+                    status: { type: 'string', enum: ['approved', 'pending'], example: 'approved' },
+                    qualityScore: { type: 'number', example: 0.98 },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    isMergedRevision: { type: 'boolean', example: false },
+                    platformLinked: { type: 'boolean', example: true },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Missing document or missing platform anchor.' },
+          '409': { description: 'Duplicate song exists. Submit as revision or allow merge.' },
+          '429': { description: 'Fair use rate limit reached.' },
+        },
+      },
+    },
+    '/api/v1/revisions/song/{songId}': {
+      get: {
+        tags: ['Revisions & Registry'],
+        summary: 'Get Revision History by Song ID',
+        description: 'Returns the chronological commit history of synchronized lyric edits and contributor quality scores for a given song.',
+        operationId: 'getRevisionHistory',
+        parameters: [
+          {
+            name: 'songId',
+            in: 'path',
+            required: true,
+            description: 'Song ID.',
+            schema: { type: 'string', example: 's_m83_midnight' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Revision history list.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    songId: { type: 'string', example: 's_m83_midnight' },
+                    songTitle: { type: 'string', example: 'Midnight City' },
+                    artistName: { type: 'string', example: 'M83' },
+                    currentRevisionHash: { type: 'string', example: '0x3a9f81b2c4' },
+                    revisions: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          hash: { type: 'string', example: '0x3a9f81b2c4' },
+                          songId: { type: 'string', example: 's_m83_midnight' },
+                          authorHandle: { type: 'string', example: '0xVaporWave' },
+                          commitMessage: { type: 'string', example: 'Add syllable timestamps' },
+                          status: { type: 'string', example: 'approved' },
+                          qualityScore: { type: 'number', example: 0.98 },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          lineCount: { type: 'integer', example: 4 },
+                          hasWordSync: { type: 'boolean', example: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '404': { description: 'Song revision history not found.' },
+        },
+      },
+    },
+    '/api/v1/revisions/{hash}/review': {
+      post: {
+        tags: ['Revisions & Registry'],
+        summary: 'Submit Peer Review Vote on Revision',
+        description: 'Records community approval votes or feedback on a specific revision hash.',
+        operationId: 'submitReviewVote',
+        parameters: [
+          {
+            name: 'hash',
+            in: 'path',
+            required: true,
+            description: 'Revision SHA-256 hash.',
+            schema: { type: 'string', example: '0x3a9f81b2c4' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['vote', 'reviewerHandle'],
+                properties: {
+                  vote: { type: 'string', enum: ['approve', 'reject', 'needs_improvement'], example: 'approve' },
+                  reviewerHandle: { type: 'string', example: 'LyricAuditor' },
+                  notes: { type: 'string', example: 'Timing verified against master audio track.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Vote recorded.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    revisionHash: { type: 'string', example: '0x3a9f81b2c4' },
+                    vote: { type: 'string', example: 'approve' },
+                    message: { type: 'string', example: "Vote 'approve' recorded successfully" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/v1/youtube/search': {
+      get: {
+        tags: ['Audio & Streams'],
+        summary: 'Search & Match YouTube Audio Reference',
+        description: 'Finds candidate YouTube audio tracks with title similarity scoring, duration alignment, and official channel weighting for studio reference audio.',
+        operationId: 'searchYouTube',
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            description: 'Artist and title query string.',
+            schema: { type: 'string', example: 'Otilia Bilionera' },
+          },
+          {
+            name: 'duration',
+            in: 'query',
+            required: false,
+            description: 'Expected track duration in seconds for precision tie-breaking.',
+            schema: { type: 'number', example: 185 },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Ranked candidate YouTube videos with calculated match scores.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    query: { type: 'string', example: 'Otilia Bilionera' },
+                    bestMatch: {
+                      type: 'object',
+                      nullable: true,
+                      properties: {
+                        videoId: { type: 'string', example: 'v4xZUtTz0k4' },
+                        title: { type: 'string', example: 'Otilia - Bilionera (official video)' },
+                        channelTitle: { type: 'string', example: 'JHaps Records' },
+                        durationSeconds: { type: 'number', example: 185 },
+                        score: { type: 'number', example: 98 },
+                      },
+                    },
+                    candidates: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          videoId: { type: 'string', example: 'v4xZUtTz0k4' },
+                          title: { type: 'string', example: 'Otilia - Bilionera (official video)' },
+                          channelTitle: { type: 'string', example: 'JHaps Records' },
+                          durationSeconds: { type: 'number', example: 185 },
+                          score: { type: 'number', example: 98 },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/v1/soundcloud/search': {
+      get: {
+        tags: ['Audio & Streams'],
+        summary: 'Search & Resolve SoundCloud Audio Stream',
+        description: 'Searches SoundCloud with token similarity matching and duration alignment, returning playback candidate URLs with matching scores.',
+        operationId: 'searchSoundCloud',
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            description: 'Track query string (title and artist).',
+            schema: { type: 'string', example: 'Otilia Bilionera Radio Edit' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Ranked candidate SoundCloud tracks.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    query: { type: 'string', example: 'Otilia Bilionera Radio Edit' },
+                    bestMatch: {
+                      type: 'object',
+                      nullable: true,
+                      properties: {
+                        url: { type: 'string', example: 'https://soundcloud.com/otilia-music/bilionera-radio-edit' },
+                        title: { type: 'string', example: 'Otilia - Bilionera (Radio Edit)' },
+                        author: { type: 'string', example: 'Otilia' },
+                        score: { type: 'number', example: 95 },
+                      },
+                    },
+                    candidates: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          url: { type: 'string', example: 'https://soundcloud.com/otilia-music/bilionera-radio-edit' },
+                          title: { type: 'string', example: 'Otilia - Bilionera (Radio Edit)' },
+                          author: { type: 'string', example: 'Otilia' },
+                          score: { type: 'number', example: 95 },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/v1/soundcloud/oembed': {
+      get: {
+        tags: ['Audio & Streams'],
+        summary: 'SoundCloud oEmbed & Artwork Proxy',
+        description: 'Proxies official SoundCloud oEmbed endpoints to fetch verified artwork thumbnails, track author, title, and HTML widget embed parameters without CORS friction.',
+        operationId: 'getSoundCloudOembed',
+        parameters: [
+          {
+            name: 'url',
+            in: 'query',
+            required: true,
+            description: 'Full SoundCloud track URL.',
+            schema: { type: 'string', example: 'https://soundcloud.com/otilia-music/bilionera-radio-edit' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'SoundCloud oEmbed metadata object.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    version: { type: 'number', example: 1 },
+                    type: { type: 'string', example: 'rich' },
+                    provider_name: { type: 'string', example: 'SoundCloud' },
+                    title: { type: 'string', example: 'Otilia - Bilionera (Radio Edit)' },
+                    author_name: { type: 'string', example: 'Otilia' },
+                    thumbnail_url: { type: 'string', example: 'https://i1.sndcdn.com/artworks-example-t500x500.jpg' },
+                    html: { type: 'string', example: '<iframe width="100%" height="400" ...></iframe>' },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Missing or invalid SoundCloud URL.' },
+        },
+      },
+    },
+    '/api/v1/dmca': {
+      post: {
+        tags: ['System'],
+        summary: 'Submit Copyright Review Notice',
+        description: 'Submits a content or copyright review notice for immediate moderation.',
+        operationId: 'submitDmcaNotice',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['songId', 'claimantName', 'claimantEmail'],
+                properties: {
+                  songId: { type: 'string', example: 's_m83_midnight' },
+                  claimantName: { type: 'string', example: 'Jane Doe' },
+                  claimantEmail: { type: 'string', format: 'email', example: 'copyright@label.com' },
+                  description: { type: 'string', example: 'Content review request details.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Notice logged successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string' },
+                    songId: { type: 'string' },
+                    flaggedAt: { type: 'string', format: 'date-time' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+openapiRouter.get('/', (c) => {
+  c.header('Content-Type', 'application/json; charset=utf-8');
+  c.header('Cache-Control', 'public, max-age=300');
+  c.header('Access-Control-Allow-Origin', '*');
+  return c.json(OPENAPI_SPEC);
+});
