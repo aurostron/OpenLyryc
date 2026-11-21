@@ -20,6 +20,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { ChordSongConfig } from '@/lib/data/chordsData';
+import { GeneratedChordAnalysis } from '@/lib/chords/analysis';
 import { GuitarChordDiagram } from './GuitarChordDiagram';
 import { HorizontalChordCarousel } from './HorizontalChordCarousel';
 import { transposeChord } from '@/lib/chords/transpose';
@@ -51,6 +52,7 @@ interface ChordsPlayerViewProps {
   onUpdateBgConfig: (cfg: BackgroundConfig) => void;
   onBackToSearch: () => void;
   onSelectSong: (song: ChordSongConfig) => void;
+  analysis?: GeneratedChordAnalysis;
 }
 
 function formatTime(seconds?: number): string {
@@ -72,19 +74,21 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
   onUpdateBgConfig,
   onBackToSearch,
   onSelectSong,
+  analysis,
 }) => {
-  // ── Transposition & Playback State ────────────────────────────────────────
+  // -- Transposition & Playback State ----------------------------------------
   const [transpose, setTranspose] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // ── Live Lyrics State ─────────────────────────────────────────────────────
+  // -- Live Lyrics State -----------------------------------------------------
   const [resolvedLines, setResolvedLines] = useState<LyricLine[]>([]);
   const [lyricsStatus, setLyricsStatus] = useState<'loading' | 'ready' | 'fallback' | 'error'>('loading');
   const resolveAbortRef = useRef<AbortController | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // ── Audio & YouTube Sync State ────────────────────────────────────────────
+  // -- Audio & YouTube Sync State --------------------------------------------
   const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(
     initialYoutubeId || song.youtubeId || null
   );
@@ -95,13 +99,13 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
   const [volume, setVolume] = useState(100);
   const [seekTrigger, setSeekTrigger] = useState<{ time: number; timestamp: number } | null>(null);
 
-  // ── Modals State ──────────────────────────────────────────────────────────
+  // -- Modals State ----------------------------------------------------------
   const [isYtModalOpen, setIsYtModalOpen] = useState(false);
   const [isBgModalOpen, setIsBgModalOpen] = useState(false);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
 
-  // ── Auto-Hide Header on Inactivity / Hover Logic ──────────────────────────
+  // -- Auto-Hide Header on Inactivity / Hover Logic --------------------------
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const hideHeaderTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -149,8 +153,32 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
     }
   }, [isAnyModalOpen, isHeaderHovered, scheduleHeaderHide]);
 
-  // ── Fetch live lyrics from the resolver ───────────────────────────────────
+  // -- Generated analysis: populate lines + duration without the resolver ----
   useEffect(() => {
+    if (!analysis) return;
+    const lines: LyricLine[] = analysis.rows.map((r) => ({
+      id: r.index,
+      text: r.tokens?.map((t) => t.chord).join(' ') || r.label,
+      start: r.startTime,
+      end: r.endTime,
+      tokens: (r.tokens || []).map((t) => ({
+        text: t.chord,
+        start: t.time,
+        end: t.time + (t.duration ?? 0.5),
+      })),
+    }));
+    setResolvedLines(lines);
+    setLyricsStatus('ready');
+    setDuration(analysis.duration);
+    // revoke previous object URL on cleanup
+    return () => {
+      // keep URL alive while mounted; revoke on unmount handled separately
+    };
+  }, [analysis]);
+
+  // -- Fetch live lyrics from the resolver -----------------------------------
+  useEffect(() => {
+    if (analysis) return; // generated analysis supplies its own timeline
     setLyricsStatus('loading');
     setResolvedLines([]);
 
@@ -189,15 +217,27 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
     return () => {
       controller.abort();
     };
-  }, [song.id, song.title, song.artist]);
+  }, [song.id, song.title, song.artist, analysis]);
 
-  // ── Transposed chord names (for the "Chords Used" list) ──────────────────
+  // -- Keep audio element in sync with isPlaying (handoff from the click handler
+  //    in handleTogglePlay; the direct play() there stays inside the user gesture)
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!analysis || !audio) return;
+    if (isPlaying && audio.paused) {
+      audio.play().catch(() => setIsPlaying(false));
+    } else if (!isPlaying && !audio.paused) {
+      audio.pause();
+    }
+  }, [isPlaying, analysis]);
+
+  // -- Transposed chord names (for the "Chords Used" list) ------------------
   const transposedChordsUsed = useMemo(
     () => song.chordsUsed.map((c) => transposeChord(c, transpose)),
     [song.chordsUsed, transpose]
   );
 
-  // ── Transposed annotations ────────────────────────────────────────────────
+  // -- Transposed annotations ------------------------------------------------
   const transposedAnnotations = useMemo(
     () =>
       song.chordAnnotations.map((ann) => ({
@@ -207,8 +247,16 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
     [song.chordAnnotations, transpose]
   );
 
-  // ── Build chord timeline ──────────────────────────────────────────────────
+  // -- Build chord timeline --------------------------------------------------
   const chordTimeline = useMemo<SyncedChordFrame[]>(() => {
+    if (analysis) {
+      return analysis.frames.map((f) => ({
+        ...f,
+        chord: transposeChord(f.chord, transpose),
+        nextChord: f.nextChord ? transposeChord(f.nextChord, transpose) : null,
+        prevChord: f.prevChord ? transposeChord(f.prevChord, transpose) : null,
+      }));
+    }
     if (lyricsStatus === 'ready' && resolvedLines.length > 0) {
       return buildChordTimelineFromLyricLines(
         resolvedLines,
@@ -226,15 +274,15 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
       }, Math.max(...transposedAnnotations.map((a) => a.lineIndex)) + 1);
     }
     return [];
-  }, [lyricsStatus, resolvedLines, transposedAnnotations, song.bpm, song.timeSignature]);
+  }, [analysis, lyricsStatus, resolvedLines, transposedAnnotations, song.bpm, song.timeSignature, transpose]);
 
-  // ── Active line index from real timestamps ────────────────────────────────
+  // -- Active line index from real timestamps --------------------------------
   const activeLineIndex = useMemo(
     () => getActiveLineIndex(resolvedLines, currentTime),
     [resolvedLines, currentTime]
   );
 
-  // ── Active chord frame ────────────────────────────────────────────────────
+  // -- Active chord frame ----------------------------------------------------
   const activeChordFrame = useMemo(
     () => getActiveChordFrame(chordTimeline, currentTime),
     [chordTimeline, currentTime]
@@ -244,14 +292,14 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
   const nextChord = activeChordFrame?.nextChord || null;
   const prevChord = activeChordFrame?.prevChord || null;
 
-  // ── Current and next display lines ───────────────────────────────────────
+  // -- Current and next display lines ---------------------------------------
   const currentLine = resolvedLines[activeLineIndex] || null;
   const nextLine = resolvedLines[activeLineIndex + 1] || null;
 
-  // ── Master Clock Fallback (no YouTube video attached) ────────────────────
+  // -- Master Clock Fallback (no YouTube video attached) --------------------
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null;
-    if (isPlaying && !youtubeVideoId) {
+    if (isPlaying && !youtubeVideoId && !analysis) {
       timer = setInterval(() => {
         setCurrentTime((prev) => {
           const next = prev + 0.25;
@@ -269,15 +317,40 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
     };
   }, [isPlaying, youtubeVideoId, duration]);
 
-  // ── Seek helpers ─────────────────────────────────────────────────────────
+  // -- Seek helpers ---------------------------------------------------------
+  const handleTogglePlay = useCallback(() => {
+    if (analysis && audioRef.current) {
+      const audio = audioRef.current;
+      if (audio.paused) {
+        const p = audio.play();
+        if (p && typeof p.then === 'function') {
+          p.then(() => setIsPlaying(true)).catch((err) => {
+            console.error('[ChordsPlayer] audio.play() failed:', err);
+            setIsPlaying(false);
+          });
+        } else {
+          setIsPlaying(true);
+        }
+      } else {
+        audio.pause();
+        setIsPlaying(false);
+      }
+      return;
+    }
+    setIsPlaying((p) => !p);
+  }, [analysis]);
+
   const handleSeek = useCallback(
     (time: number) => {
       const end = duration > 0 ? duration : 360;
       const clamped = Math.max(0, Math.min(time, end));
       setCurrentTime(clamped);
       setSeekTrigger({ time: clamped, timestamp: Date.now() });
+      if (analysis && audioRef.current) {
+        audioRef.current.currentTime = clamped;
+      }
     },
-    [duration]
+    [duration, analysis]
   );
 
   const handlePrevLine = () => {
@@ -292,7 +365,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
     if (line) handleSeek(line.start);
   };
 
-  // ── Curvy S-Curve Scrubber Engine (Matching Reference) ────────────────────
+  // -- Curvy S-Curve Scrubber Engine (Matching Reference) --------------------
   const CURVE_PATH_D = 'M 15 35 C 80 58, 140 50, 200 30 C 260 10, 320 12, 385 35';
   const curvePathRef = useRef<SVGPathElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
@@ -377,7 +450,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
     window.addEventListener('touchend', onTouchEnd);
   };
 
-  // ── Share ─────────────────────────────────────────────────────────────────
+  // -- Share -----------------------------------------------------------------
   const handleShare = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('id', song.id);
@@ -390,7 +463,18 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
 
   return (
     <div className="fixed inset-0 flex flex-col text-white selection:bg-white/20 selection:text-white overflow-hidden bg-[#08080a] font-sans select-none">
-      {/* ── Ambient Background ──────────────────────────────────────────────── */}
+      {analysis && (
+        <audio
+          ref={audioRef}
+          src={analysis.audioUrl}
+          preload="auto"
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || analysis.duration)}
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          onEnded={() => setIsPlaying(false)}
+          onError={(e) => console.error('[ChordsPlayer] audio error:', e.currentTarget.error)}
+        />
+      )}
+      {/* -- Ambient Background ------------------------------------------------ */}
       {song.coverArt && (
         <div
           className="fixed inset-0 bg-cover bg-center pointer-events-none z-0 scale-125 opacity-25 filter blur-3xl transition-all duration-700"
@@ -399,7 +483,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
       )}
       <div className="fixed inset-0 bg-black/80 pointer-events-none z-0" />
 
-      {/* ── YouTube Audio Engine (off-screen) ──────────────────────────────── */}
+      {/* -- YouTube Audio Engine (off-screen) -------------------------------- */}
       {youtubeVideoId && (
         <div
           className={
@@ -424,13 +508,13 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
         </div>
       )}
 
-      {/* ── Invisible Top Hover Sensor (Awakens header when cursor moves to top edge) ── */}
+      {/* -- Invisible Top Hover Sensor (Awakens header when cursor moves to top edge) -- */}
       <div
         onMouseEnter={() => handleUserActivity()}
         className="fixed top-0 left-0 right-0 h-4 z-40 pointer-events-auto"
       />
 
-      {/* ── Top Header Bar (Auto-hides on inactivity / returns on hover or interaction) ── */}
+      {/* -- Top Header Bar (Auto-hides on inactivity / returns on hover or interaction) -- */}
       <header
         onMouseEnter={() => setIsHeaderHovered(true)}
         onMouseLeave={() => setIsHeaderHovered(false)}
@@ -500,7 +584,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
         </div>
       </header>
 
-      {/* ── Main Fixed Workspace ─────────────────────────────────────────────── */}
+      {/* -- Main Fixed Workspace ----------------------------------------------- */}
       <main className="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20 pt-16 pb-4 gap-8">
         {/* Left Column: Cover, Track Info & Controls (4 cols) */}
         <div className="lg:col-span-4 flex flex-col justify-between h-full pr-2">
@@ -568,7 +652,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
               </div>
             </div>
 
-            {/* ── Curvy Duration Scrubber & Primary Controls (Matching Reference) ── */}
+            {/* -- Curvy Duration Scrubber & Primary Controls (Matching Reference) -- */}
             <div className="space-y-3 pt-1">
               {/* Curvy S-Curve Scrubber Wave */}
               <div
@@ -651,7 +735,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
                 {/* Prominent Circular Play / Pause Button */}
                 <button
                   type="button"
-                  onClick={() => setIsPlaying((p) => !p)}
+                  onClick={handleTogglePlay}
                   className="w-14 h-14 rounded-full bg-white text-zinc-950 flex items-center justify-center hover:scale-105 active:scale-95 hover:bg-zinc-200 transition-all shadow-xl cursor-pointer shrink-0"
                   title={isPlaying ? 'Pause' : 'Play'}
                 >
@@ -725,7 +809,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
           {/* Scrubber accent line */}
           <div className="absolute top-0 right-2 bottom-0 w-0.5 bg-gradient-to-b from-white/10 via-white/40 to-white/10 shadow-[0_0_8px_rgba(255,255,255,0.6)] rounded-full pointer-events-none" />
 
-          {/* ── Horizontal Chord Carousel (fixed at top) ── */}
+          {/* -- Horizontal Chord Carousel (fixed at top) -- */}
           <div className="w-full flex flex-col items-center justify-center shrink-0 py-2">
             <HorizontalChordCarousel
               currentChord={currentChord}
@@ -734,7 +818,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
             />
           </div>
 
-          {/* ── 2-Line Rotating Lyrics Stage ── */}
+          {/* -- 2-Line Rotating Lyrics Stage -- */}
           <div className="w-full max-w-2xl flex flex-col gap-6 justify-center my-auto py-4 text-left">
             {lyricsStatus === 'loading' && (
               <div className="flex items-center gap-3 text-zinc-500">
@@ -812,7 +896,7 @@ export const ChordsPlayerView: React.FC<ChordsPlayerViewProps> = ({
         </div>
       </main>
 
-      {/* ── Modals ──────────────────────────────────────────────────────────── */}
+      {/* -- Modals ------------------------------------------------------------ */}
       {isYtModalOpen && (
         <YouTubeFetcherModal
           isOpen={isYtModalOpen}

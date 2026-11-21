@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono, Poppins } from 'next/font/google';
 import LastActivePing from '@/components/LastActivePing';
+import { OvisReactBridge } from '@/components/OvisReactBridge';
 import './globals.css';
 
 const geist = Geist({
@@ -159,6 +160,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-[#09090b] text-[#f4f4f5] font-sans antialiased selection:bg-white/20 selection:text-white">
+        <OvisReactBridge />
         {children}
         <LastActivePing />
       </body>

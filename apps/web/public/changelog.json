@@ -1,23 +1,9 @@
 [
   {
-    "hash": "62f353b",
-    "subject": "Add karaoke route, instrumental search, slow metallic shimmer, and coordinated 3-phase scene crossfade",
-    "rawSubject": "feat(lyrics,karaoke): add karaoke route, instrumental search, slow metallic shimmer, and coordinated 3-phase scene crossfade",
-    "tag": "New",
-    "date": "Nov 15, 2026"
-  },
-  {
-    "hash": "33b3df7",
-    "subject": "Remove unused sections from README",
-    "rawSubject": "Remove unused sections from README",
+    "hash": "55f177b",
+    "subject": "OpenLyryc goes open source!",
+    "rawSubject": "OpenLyryc goes open source!",
     "tag": "Update",
-    "date": "Nov 1, 2026"
-  },
-  {
-    "hash": "214da33",
-    "subject": "Revise visualizer performance description in README",
-    "rawSubject": "Revise visualizer performance description in README",
-    "tag": "Update",
-    "date": "Nov 1, 2026"
+    "date": "Nov 16, 2026"
   }
 ]

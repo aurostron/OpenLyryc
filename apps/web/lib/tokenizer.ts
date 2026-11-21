@@ -1,4 +1,4 @@
-import lexiconData from './data/japaneseLexicon.json' with { type: 'json' };
+import lexiconData from './data/japaneseLexicon.json';
 /**
  * OpenLyryc Intelligent Multilingual Tokenizer
  *
