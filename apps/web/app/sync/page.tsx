@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Check, Wifi, WifiOff, Rewind, FastForward } from 'lucide-react';
 import { LyricLine, WordToken, interpolateWordTokens, normalizeTapTokens } from '@openlyryc/schema';
 import { TapSyncPeer } from '@/lib/tapSync/TapSyncPeer';
+import OpenLyrycLogo from '@/components/OpenLyrycLogo';
 
 const SECONDS_PER_PX = 0.05; // 20px of drag = 1 second of seek
 
@@ -350,8 +351,8 @@ function TapSyncClientContent() {
       <main className="min-h-[100dvh] bg-[#000000] text-zinc-100 flex flex-col justify-between px-6 py-8 font-sans select-none touch-manipulation">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold tracking-tight text-white uppercase">OpenLyryc</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-zinc-300">Tap Sync</span>
+            <OpenLyrycLogo></OpenLyrycLogo>
+            <span className="text-[11px] bg-white/10 text-zinc-300">Tap Sync</span>
           </div>
         </header>
 
@@ -389,7 +390,7 @@ function TapSyncClientContent() {
         </div>
 
         <footer className="text-center text-xs text-zinc-600">
-          Super fast native WebRTC peer-to-peer connection
+          Super fast connection, fully offline.
         </footer>
       </main>
     );

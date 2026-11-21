@@ -1,4 +1,4 @@
-import { OpenLyricsDocument, WordToken } from './lyrics';
+import { OpenLyricsDocument, WordToken, LyricLine } from './lyrics';
 
 export interface HistorySnapshot {
   document: OpenLyricsDocument;
@@ -48,6 +48,7 @@ export type EditorAction =
   | { type: 'CONVERT_TO_INDIC_ROMAN'; language?: string }
   | { type: 'SHIFT_ALL_TIMESTAMPS'; deltaSeconds: number }
   | { type: 'BAKE_OFFSET_INTO_TIMESTAMPS' }
+  | { type: 'BATCH_REPLACE_LINES'; lines: LyricLine[]; desc: string }
   | { type: 'UNDO' }
   | { type: 'REDO' };
 

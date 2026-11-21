@@ -159,8 +159,8 @@ export function getLineSequentialWords(line: LyricLine): ParsedWord[] {
 
       let hasSpaceBefore = false;
       const foundIdx = lineText.indexOf(trimmed, searchPos);
-      if (foundIdx > 0) {
-        hasSpaceBefore = /\s/.test(lineText.slice(searchPos, foundIdx));
+      if (foundIdx >= 0) {
+        hasSpaceBefore = foundIdx > 0 ? /\s/.test(lineText.slice(searchPos, foundIdx)) : false;
         searchPos = foundIdx + trimmed.length;
       } else if (idx > 0 && !isJp) {
         hasSpaceBefore = true;
@@ -197,8 +197,8 @@ export function getLineSequentialWords(line: LyricLine): ParsedWord[] {
 
     let hasSpaceBefore = false;
     const foundIdx = lineText.indexOf(trimmed, searchPos);
-    if (foundIdx > 0) {
-      hasSpaceBefore = /\s/.test(lineText.slice(searchPos, foundIdx));
+    if (foundIdx >= 0) {
+      hasSpaceBefore = foundIdx > 0 ? /\s/.test(lineText.slice(searchPos, foundIdx)) : false;
       searchPos = foundIdx + trimmed.length;
     } else if (idx > 0 && !isJp) {
       hasSpaceBefore = true;
@@ -256,6 +256,16 @@ export const LyricWordFill: React.FC<LyricWordFillProps> = React.memo(({
         : stageStyle)
     : undefined;
 
+  // Question mark slide-glide animation: emerge from behind the word synced with word progress
+  const punctMatch = word.text.match(/^([\s\S]*?)(\?+|؟+|！？+|!\?+|\?!+)$/);
+  const coreText = punctMatch ? punctMatch[1] : word.text;
+  const punct = punctMatch ? punctMatch[2] : '';
+
+  const punctProgress = Math.min(1, Math.max(0, (wordProgress - 0.2) / 0.8));
+  const punctEased = isFullyPlayed || isPast ? 1 : isPlaying ? (1 - Math.pow(1 - punctProgress, 2.5)) : 0;
+  const punctTransform = `translate3d(${-100 * (1 - punctEased)}%, 0.06em, 0)`;
+  const punctOpacity = punctEased;
+
   return (
     <>
       {word.hasSpaceBefore && (
@@ -282,14 +292,43 @@ export const LyricWordFill: React.FC<LyricWordFillProps> = React.memo(({
           }`}
           style={wordStyle}
         >
-          {word.text}
+          {coreText}
+          {punct ? (
+            <span
+              className="relative inline-block overflow-visible align-baseline ml-[0.02em]"
+              style={{ clipPath: 'inset(-30% 0 -30% 0)' }}
+            >
+              <span
+                className="inline-block"
+                style={{ transform: 'translate3d(0, 0.06em, 0)', opacity: 1 }}
+              >
+                {punct}
+              </span>
+            </span>
+          ) : null}
         </span>
       ) : isPlaying ? (
         /* 2. Actively Singing State: GPU-clipped text sweep with zero shifting or duplication */
         <span className="relative inline-block overflow-visible whitespace-nowrap">
           {/* Base Layer: Crisp zinc unplayed text */}
           <span className="text-zinc-400/90 inline-block font-extrabold" style={wordStyle}>
-            {word.text}
+            {coreText}
+            {punct ? (
+              <span
+                className="relative inline-block overflow-visible align-baseline ml-[0.02em]"
+                style={{ clipPath: 'inset(-30% 0 -30% 0)' }}
+              >
+                <span
+                  className="inline-block will-change-transform"
+                  style={{
+                    transform: punctTransform,
+                    opacity: punctOpacity,
+                  }}
+                >
+                  {punct}
+                </span>
+              </span>
+            ) : null}
           </span>
           {/* Highlight Sweep: Exactly superimposed white text, clipped cleanly from right to left */}
           <span
@@ -301,7 +340,23 @@ export const LyricWordFill: React.FC<LyricWordFillProps> = React.memo(({
               ...wordStyle,
             }}
           >
-            {word.text}
+            {coreText}
+            {punct ? (
+              <span
+                className="relative inline-block overflow-visible align-baseline ml-[0.02em]"
+                style={{ clipPath: 'inset(-30% 0 -30% 0)' }}
+              >
+                <span
+                  className="inline-block will-change-transform"
+                  style={{
+                    transform: punctTransform,
+                    opacity: punctOpacity,
+                  }}
+                >
+                  {punct}
+                </span>
+              </span>
+            ) : null}
           </span>
         </span>
       ) : (
@@ -320,7 +375,23 @@ export const LyricWordFill: React.FC<LyricWordFillProps> = React.memo(({
           }`}
           style={wordStyle}
         >
-          {word.text}
+          {coreText}
+          {punct ? (
+            <span
+              className="relative inline-block overflow-visible align-baseline ml-[0.02em]"
+              style={{ clipPath: 'inset(-30% 0 -30% 0)' }}
+            >
+              <span
+                className="inline-block"
+                style={{
+                  transform: isPast ? 'translate3d(0, 0.06em, 0)' : 'translate3d(-100%, 0.06em, 0)',
+                  opacity: isPast ? 1 : 0,
+                }}
+              >
+                {punct}
+              </span>
+            </span>
+          ) : null}
         </span>
       )}
 

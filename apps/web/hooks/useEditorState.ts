@@ -77,13 +77,25 @@ function divideLineIntoWordLines(line: LyricLine): LyricLine[] {
     return [line];
   }
 
+  const parentSentenceId = line.sentenceId || line.id || generateUniqueId('sentence');
+
+  // If line already has stamped word tokens that match words.length, use the actual stamped timings!
+  if (line.tokens && line.tokens.length === words.length) {
+    return words.map((w, idx) => ({
+      id: generateUniqueId('word'),
+      sentenceId: parentSentenceId,
+      text: w,
+      start: line.tokens![idx].start,
+      end: line.tokens![idx].end,
+      emphasis: line.tokens![idx].emphasis || line.emphasis || undefined,
+    }));
+  }
+
   const lineStart = line.start;
   const lineEnd = Math.max(lineStart + 0.1, line.end);
   const totalDuration = lineEnd - lineStart;
   const weights = words.map((w) => estimateWordPhoneticWeight(w));
   const totalWeight = weights.reduce((acc, val) => acc + val, 0) || 1;
-
-  const parentSentenceId = line.sentenceId || line.id || generateUniqueId('sentence');
   let currentStart = lineStart;
 
   return words.map((w, idx) => {
@@ -132,11 +144,18 @@ export function createLineWordTokens(line: LyricLine): WordToken[] {
   });
 }
 
+function cleanTokenForMatch(s: string): string {
+  const cleaned = s.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+  return cleaned || s.trim().toLowerCase();
+}
+
 /**
  * Synchronizes existing word tokens with edited line text.
  * - Preserves existing stamped start/end timestamps and emphasis states.
- * - Updates token text to reflect edits/corrections made in the line input.
- * - If words were added or removed, smoothly updates token list.
+ * - Handles token splitting: e.g. "Hey-yeah," -> "Hey" + "yeah,", dividing time proportionally.
+ * - Handles token merging: e.g. "Hey" + "yeah" -> "Hey-yeah,", combining time bounds.
+ * - Handles anchor matching and smooth non-overlapping interpolation for added/deleted words.
+ * - Guarantees zero overlapping word timestamps under all editing conditions.
  */
 export function syncLineWordTokens(
   existingTokens: WordToken[] | undefined,
@@ -156,12 +175,8 @@ export function syncLineWordTokens(
 
   const safeLineStart = lineStart;
   const safeLineEnd = Math.max(safeLineStart + 0.1, lineEnd);
-  const totalDuration = safeLineEnd - safeLineStart;
-  const weights = newWords.map((w) => estimateWordPhoneticWeight(w));
-  const totalWeight = weights.reduce((acc, val) => acc + val, 0) || 1;
-  let currentStart = safeLineStart;
 
-  // Case 1: Exact same token count (user fixed a word/typo)
+  // Case 1: Exact same token count (user fixed a word/typo without changing word boundaries)
   if (newWords.length === existingTokens.length) {
     return existingTokens.map((tok, idx) => ({
       ...tok,
@@ -169,27 +184,195 @@ export function syncLineWordTokens(
     }));
   }
 
-  // Case 2: Token count changed (words added or removed)
-  return newWords.map((word, idx) => {
-    const wordDuration = (weights[idx] / totalWeight) * totalDuration;
-    const wordStart = idx === 0 ? safeLineStart : currentStart;
-    const wordEnd = idx === newWords.length - 1 ? safeLineEnd : currentStart + wordDuration;
-    currentStart = wordEnd;
+  // Case 2: Token count changed (words split by removing hyphens, merged, inserted, or deleted)
+  const result: WordToken[] = [];
+  let wIdx = 0;
+  let tIdx = 0;
 
-    if (idx < existingTokens.length) {
-      return {
-        ...existingTokens[idx],
-        text: word,
-      };
+  while (wIdx < newWords.length && tIdx < existingTokens.length) {
+    const wClean = cleanTokenForMatch(newWords[wIdx]);
+    const tClean = cleanTokenForMatch(existingTokens[tIdx].text);
+
+    // Subcase 2A: Direct 1-to-1 word match
+    if (wClean && wClean === tClean) {
+      result.push({
+        ...existingTokens[tIdx],
+        text: newWords[wIdx],
+      });
+      wIdx++;
+      tIdx++;
+      continue;
     }
 
-    return {
-      text: word,
-      start: Number(wordStart.toFixed(3)),
-      end: Number(wordEnd.toFixed(3)),
-      emphasis: lineEmphasis || undefined,
-    };
-  });
+    // Subcase 2B: Token split - an existing token was split into multiple words (e.g. 'Hey-yeah,' -> 'Hey' + 'yeah,')
+    const matchedWords: string[] = [];
+    let accumWordClean = '';
+    let lookW = wIdx;
+    let isSplitFound = false;
+
+    while (lookW < newWords.length) {
+      accumWordClean += cleanTokenForMatch(newWords[lookW]);
+      matchedWords.push(newWords[lookW]);
+      lookW++;
+      if (tClean && accumWordClean === tClean) {
+        isSplitFound = true;
+        break;
+      }
+      if (accumWordClean.length > tClean.length) {
+        break;
+      }
+    }
+
+    if (isSplitFound && matchedWords.length > 0) {
+      const parentTok = existingTokens[tIdx];
+      const tokDuration = Math.max(0.08, parentTok.end - parentTok.start);
+      const weights = matchedWords.map((w) => estimateWordPhoneticWeight(w));
+      const totalWeight = weights.reduce((acc, val) => acc + val, 0) || 1;
+      let curStart = parentTok.start;
+
+      for (let i = 0; i < matchedWords.length; i++) {
+        const wDur = (weights[i] / totalWeight) * tokDuration;
+        const wEnd = i === matchedWords.length - 1 ? parentTok.end : curStart + wDur;
+        result.push({
+          text: matchedWords[i],
+          start: Number(curStart.toFixed(3)),
+          end: Number(wEnd.toFixed(3)),
+          emphasis: parentTok.emphasis ?? lineEmphasis ?? undefined,
+        });
+        curStart = wEnd;
+      }
+
+      wIdx = lookW;
+      tIdx++;
+      continue;
+    }
+
+    // Subcase 2C: Tokens merged - multiple existing tokens were merged into one word (e.g. 'Hey' + 'yeah' -> 'Hey-yeah')
+    const matchedToks: WordToken[] = [];
+    let accumTokClean = '';
+    let lookT = tIdx;
+    let isMergeFound = false;
+
+    while (lookT < existingTokens.length) {
+      accumTokClean += cleanTokenForMatch(existingTokens[lookT].text);
+      matchedToks.push(existingTokens[lookT]);
+      lookT++;
+      if (wClean && accumTokClean === wClean) {
+        isMergeFound = true;
+        break;
+      }
+      if (accumTokClean.length > wClean.length) {
+        break;
+      }
+    }
+
+    if (isMergeFound && matchedToks.length > 0) {
+      const firstTok = matchedToks[0];
+      const lastTok = matchedToks[matchedToks.length - 1];
+      result.push({
+        text: newWords[wIdx],
+        start: firstTok.start,
+        end: lastTok.end,
+        emphasis: firstTok.emphasis || lastTok.emphasis || lineEmphasis || undefined,
+      });
+      wIdx++;
+      tIdx = lookT;
+      continue;
+    }
+
+    // Subcase 2D: Insertion or word mismatch - look ahead for next anchor match
+    let anchor: [number, number] | null = null;
+    const maxLookahead = 4;
+    for (let fw = wIdx + 1; fw < Math.min(newWords.length, wIdx + maxLookahead); fw++) {
+      const fwClean = cleanTokenForMatch(newWords[fw]);
+      if (!fwClean) continue;
+      for (let ft = tIdx + 1; ft < Math.min(existingTokens.length, tIdx + maxLookahead); ft++) {
+        if (fwClean === cleanTokenForMatch(existingTokens[ft].text)) {
+          anchor = [fw, ft];
+          break;
+        }
+      }
+      if (anchor) break;
+    }
+
+    if (anchor) {
+      const [fw, ft] = anchor;
+      const spanStart = result.length > 0 ? result[result.length - 1].end : safeLineStart;
+      const spanEnd = existingTokens[ft].start;
+      const spanDuration = Math.max(0.08, spanEnd - spanStart);
+      const intermediateWords = newWords.slice(wIdx, fw);
+      const weights = intermediateWords.map((w) => estimateWordPhoneticWeight(w));
+      const totalWeight = weights.reduce((acc, val) => acc + val, 0) || 1;
+      let curStart = spanStart;
+
+      for (let i = 0; i < intermediateWords.length; i++) {
+        const wDur = (weights[i] / totalWeight) * spanDuration;
+        const wEnd = i === intermediateWords.length - 1 ? spanEnd : curStart + wDur;
+        result.push({
+          text: intermediateWords[i],
+          start: Number(curStart.toFixed(3)),
+          end: Number(wEnd.toFixed(3)),
+          emphasis: lineEmphasis || undefined,
+        });
+        curStart = wEnd;
+      }
+
+      wIdx = fw;
+      tIdx = ft;
+    } else {
+      // 1-to-1 fallback for single word replacement/edit
+      result.push({
+        ...existingTokens[tIdx],
+        text: newWords[wIdx],
+      });
+      wIdx++;
+      tIdx++;
+    }
+  }
+
+  // Handle any remaining newly added words at the end
+  if (wIdx < newWords.length) {
+    const trailingWords = newWords.slice(wIdx);
+    const spanStart = result.length > 0 ? result[result.length - 1].end : safeLineStart;
+    let spanEnd = safeLineEnd;
+    if (spanEnd <= spanStart) {
+      spanEnd = spanStart + 0.5 * trailingWords.length;
+    }
+    const spanDuration = spanEnd - spanStart;
+    const weights = trailingWords.map((w) => estimateWordPhoneticWeight(w));
+    const totalWeight = weights.reduce((acc, val) => acc + val, 0) || 1;
+    let curStart = spanStart;
+
+    for (let i = 0; i < trailingWords.length; i++) {
+      const wDur = (weights[i] / totalWeight) * spanDuration;
+      const wEnd = i === trailingWords.length - 1 ? spanEnd : curStart + wDur;
+      result.push({
+        text: trailingWords[i],
+        start: Number(curStart.toFixed(3)),
+        end: Number(wEnd.toFixed(3)),
+        emphasis: lineEmphasis || undefined,
+      });
+      curStart = wEnd;
+    }
+  }
+
+  // Monotonic Sanitization Pass: Enforce strict chronological bounds and positive duration
+  for (let i = 0; i < result.length; i++) {
+    if (result[i].start < safeLineStart) {
+      result[i].start = safeLineStart;
+    }
+    if (result[i].end <= result[i].start) {
+      result[i].end = Number((result[i].start + 0.05).toFixed(3));
+    }
+    if (i > 0 && result[i].start < result[i - 1].end) {
+      result[i].start = result[i - 1].end;
+      if (result[i].end <= result[i].start) {
+        result[i].end = Number((result[i].start + 0.05).toFixed(3));
+      }
+    }
+  }
+
+  return result;
 }
 
 export const defaultEmptyDocument: OpenLyricsDocument = {
@@ -888,6 +1071,14 @@ function historyReducer(state: HistoryState, action: EditorAction): HistoryState
       );
     }
 
+    case 'BATCH_REPLACE_LINES': {
+      return commitAction(
+        state,
+        { ...present, lines: action.lines },
+        action.desc
+      );
+    }
+
     default:
       return state;
   }
@@ -1127,6 +1318,11 @@ export function useEditorState(initialDoc: OpenLyricsDocument = defaultEmptyDocu
     ),
     bakeOffsetIntoTimestamps: useCallback(
       () => dispatch({ type: 'BAKE_OFFSET_INTO_TIMESTAMPS' }),
+      []
+    ),
+    batchReplaceLines: useCallback(
+      (lines: LyricLine[], desc = 'replaced text') =>
+        dispatch({ type: 'BATCH_REPLACE_LINES', lines, desc }),
       []
     ),
     historyLog,

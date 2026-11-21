@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { LyricLine, WordToken } from '@/types/lyrics';
 import { CollabUser } from '@/types/collab';
 import { formatLrcTimecode, parseLrcTimecode } from '@/lib/lrcParser';
@@ -23,6 +23,7 @@ import {
   Minimize2,
   Sparkles,
 } from 'lucide-react';
+import { FindMatch, FindOptions, buildSearchRegex } from './FindReplaceWidget';
 
 interface LyricEditorProps {
   lines: LyricLine[];
@@ -66,6 +67,10 @@ interface LyricEditorProps {
   onConvertToIndicRoman?: (lang?: IndicLanguageCode) => void;
   onShiftAllTimestamps?: (deltaSeconds: number) => void;
   onStartTutorial?: () => void;
+  findMatches?: FindMatch[];
+  activeFindMatchIndex?: number;
+  findQuery?: string;
+  findOptions?: FindOptions;
 }
 
 interface TimecodePillProps {
@@ -193,6 +198,47 @@ interface LyricRowProps {
   onUndo?: () => void;
   onSetLineVocalist?: (lineIdx: number, vocalist: string | undefined) => void;
   isHoldSyncing?: boolean;
+  lineMatches?: FindMatch[];
+  activeMatchId?: string;
+  findQuery?: string;
+  findOptions?: FindOptions;
+}
+
+function renderHighlightedText(
+  text: string,
+  matches: FindMatch[],
+  activeMatchId?: string
+): React.ReactNode {
+  if (!matches || matches.length === 0) return text;
+  const sorted = [...matches].sort((a, b) => a.startChar - b.startChar);
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  sorted.forEach((m, i) => {
+    if (m.startChar > lastIndex) {
+      elements.push(text.slice(lastIndex, m.startChar));
+    }
+    const isCurActive = m.id === activeMatchId;
+    elements.push(
+      <mark
+        key={`match-${i}-${m.startChar}`}
+        className={`rounded px-0.5 ${
+          isCurActive
+            ? 'bg-amber-400 text-black font-semibold ring-1 ring-amber-300 shadow-xs'
+            : 'bg-amber-400/25 text-amber-200'
+        }`}
+      >
+        {text.slice(m.startChar, m.endChar)}
+      </mark>
+    );
+    lastIndex = m.endChar;
+  });
+
+  if (lastIndex < text.length) {
+    elements.push(text.slice(lastIndex));
+  }
+
+  return <>{elements}</>;
 }
 
 const LyricRow: React.FC<LyricRowProps> = React.memo(({
@@ -225,14 +271,43 @@ const LyricRow: React.FC<LyricRowProps> = React.memo(({
   onUndo,
   onSetLineVocalist,
   isHoldSyncing,
+  lineMatches,
+  activeMatchId,
+  findQuery,
+  findOptions,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [isEditingText, setIsEditingText] = useState<boolean>(false);
   const hasTokens = Boolean(line.tokens && line.tokens.length > 0);
   const isEmphasized = Boolean(line.emphasis);
+  const hasLineMatches = Boolean(lineMatches && lineMatches.length > 0);
+
+  const searchRx = useMemo(
+    () => (findQuery ? buildSearchRegex(findQuery, findOptions || { caseSensitive: false, wholeWord: false }) : null),
+    [findQuery, findOptions]
+  );
+
+  // Map token spans to correlate with exact lineMatches for individual word highlighting
+  const tokenSpans = useMemo(() => {
+    if (!line.tokens || line.tokens.length === 0) return [];
+    const spans: { startChar: number; endChar: number }[] = [];
+    let cursor = 0;
+    for (const token of line.tokens) {
+      const rawWord = token.text;
+      const foundIdx = line.text.indexOf(rawWord, cursor);
+      if (foundIdx !== -1) {
+        spans.push({ startChar: foundIdx, endChar: foundIdx + rawWord.length });
+        cursor = foundIdx + rawWord.length;
+      } else {
+        spans.push({ startChar: cursor, endChar: cursor + rawWord.length });
+      }
+    }
+    return spans;
+  }, [line.tokens, line.text]);
 
   return (
     <div
+      id={`lyric-row-${idx}`}
       ref={innerRef}
       onClick={() => {
         setActiveLineIndex(idx);
@@ -314,6 +389,13 @@ const LyricRow: React.FC<LyricRowProps> = React.memo(({
                   const isWordFocused = isActive && tIdx === activeTokenIndex;
                   const isEmphasizedWord = Boolean(token.emphasis ?? line.emphasis);
 
+                  const span = tokenSpans[tIdx];
+                  const matchingMatch = lineMatches?.find(
+                    (m) => span && m.startChar < span.endChar && m.endChar > span.startChar
+                  );
+                  const isTokenMatch = Boolean(findQuery && matchingMatch);
+                  const isTokenActiveMatch = Boolean(findQuery && matchingMatch && matchingMatch.id === activeMatchId);
+
                   return (
                     <span
                       key={tIdx}
@@ -324,7 +406,11 @@ const LyricRow: React.FC<LyricRowProps> = React.memo(({
                         onSeek?.(token.start);
                       }}
                       className={`relative inline-flex items-center px-0.5 py-0.5 transition-colors cursor-pointer font-sans text-base sm:text-sm leading-normal select-none ${
-                        isWordFocused
+                        isTokenActiveMatch
+                          ? 'bg-amber-400 text-black font-semibold rounded px-1 ring-1 ring-amber-300 shadow-xs'
+                          : isTokenMatch
+                          ? 'bg-amber-400/25 text-amber-200 rounded px-1'
+                          : isWordFocused
                           ? 'text-white font-bold'
                           : isActive
                           ? 'text-zinc-200 hover:text-white'
@@ -370,6 +456,25 @@ const LyricRow: React.FC<LyricRowProps> = React.memo(({
                     </span>
                   );
                 })}
+              </div>
+            ) : findQuery && !isEditingText && hasLineMatches ? (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditingText(true);
+                  setActiveLineIndex(idx);
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditingText(true);
+                  setActiveLineIndex(idx);
+                }}
+                className={`w-full py-1.5 font-sans text-base sm:text-sm font-medium cursor-text select-text transition-colors leading-normal ${
+                  isActive ? 'text-white font-semibold' : 'text-zinc-200'
+                }`}
+                title="Click to edit text"
+              >
+                {renderHighlightedText(line.text, lineMatches || [], activeMatchId)}
               </div>
             ) : (
               <input
@@ -683,10 +788,30 @@ export const LyricEditor: React.FC<LyricEditorProps> = React.memo(({
   onConvertToIndicRoman,
   onShiftAllTimestamps,
   onStartTutorial,
+  findMatches,
+  activeFindMatchIndex,
+  findQuery,
+  findOptions,
 }) => {
   const activeRowRef = React.useRef<HTMLDivElement>(null);
   const [isBoxDragOver, setIsBoxDragOver] = useState(false);
   const dropFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const matchesByLine = useMemo(() => {
+    const map = new Map<number, FindMatch[]>();
+    if (!findMatches || findMatches.length === 0) return map;
+    for (const m of findMatches) {
+      const list = map.get(m.lineIndex) || [];
+      list.push(m);
+      map.set(m.lineIndex, list);
+    }
+    return map;
+  }, [findMatches]);
+
+  const activeMatchId = useMemo(() => {
+    if (!findMatches || activeFindMatchIndex === undefined) return undefined;
+    return findMatches[activeFindMatchIndex]?.id;
+  }, [findMatches, activeFindMatchIndex]);
 
   const handleBoxDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -1027,6 +1152,10 @@ export const LyricEditor: React.FC<LyricEditorProps> = React.memo(({
                 onUndo={onUndo}
                 onSetLineVocalist={onSetLineVocalist}
                 isHoldSyncing={isHoldSyncing}
+                lineMatches={matchesByLine.get(idx)}
+                activeMatchId={activeMatchId}
+                findQuery={findQuery}
+                findOptions={findOptions}
               />
             );
           });

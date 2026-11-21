@@ -48,6 +48,7 @@ import { checkCompanionBridge, downloadViaCompanionBridge, isCompanionPaired, se
 import { UndoToast, ToastAction } from '@/components/UndoToast';
 import { StudioTaskbarDock } from '@/components/StudioTaskbarDock';
 import { AmbientBackground } from '@/components/AmbientBackground';
+import { FindReplaceWidget, type FindMatch, type FindOptions } from '@/components/FindReplaceWidget';
 import { YouTubeCornerEmbed } from '@/components/YouTubeCornerEmbed';
 import { SoundCloudBottomEmbed } from '@/components/SoundCloudBottomEmbed';
 import { SoundCloudSelectModal } from '@/components/SoundCloudSelectModal';
@@ -340,6 +341,7 @@ export default function OpenLyricsSyncEngine() {
     convertToIndicRoman,
     shiftAllTimestamps,
     bakeOffsetIntoTimestamps,
+    batchReplaceLines,
   } = useEditorState();
 
   const lintIssues = useMemo(() => lintDocument(doc), [doc]);
@@ -951,6 +953,56 @@ export default function OpenLyricsSyncEngine() {
 
   const [isYouTubeEmbedOpen, setIsYouTubeEmbedOpen] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isFindOpen, setIsFindOpen] = useState<boolean>(false);
+  const [isReplaceExpanded, setIsReplaceExpanded] = useState<boolean>(false);
+  const [findMatches, setFindMatches] = useState<FindMatch[]>([]);
+  const [activeFindMatchIndex, setActiveFindMatchIndex] = useState<number>(0);
+  const [findQuery, setFindQuery] = useState<string>('');
+  const [findOptions, setFindOptions] = useState<FindOptions>({ caseSensitive: false, wholeWord: false });
+
+  const handleCloseFind = useCallback(() => {
+    setIsFindOpen(false);
+    setFindMatches([]);
+    setFindQuery('');
+    setSearchQuery('');
+    setActiveFindMatchIndex(0);
+  }, []);
+
+  // Global capture shortcut handler for Ctrl+F / Cmd+F and Ctrl+H / Cmd+H
+  useEffect(() => {
+    const handleKeyDownCapture = (e: KeyboardEvent) => {
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+
+      // Intercept Ctrl+F / Cmd+F -> Suppress native browser find and open studio Find
+      if (isCtrlOrMeta && key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFindOpen(true);
+        if (viewTab !== 'editor' && viewTab !== 'split' && viewTab !== 'timeline') {
+          setViewTab('editor');
+        }
+        return;
+      }
+
+      // Intercept Ctrl+H / Cmd+H -> Open studio Find & Replace
+      if (isCtrlOrMeta && key === 'h') {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFindOpen(true);
+        setIsReplaceExpanded(true);
+        if (viewTab !== 'editor' && viewTab !== 'split' && viewTab !== 'timeline') {
+          setViewTab('editor');
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDownCapture, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDownCapture, true);
+    };
+  }, [viewTab]);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isNoAudioModalOpen, setIsNoAudioModalOpen] = useState<boolean>(false);
@@ -3207,7 +3259,7 @@ export default function OpenLyricsSyncEngine() {
 
         {/* 3. Right: Search, Sync Offset & CTAs */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Search Input (Desktop Only) */}
+          {/* Search / Find Input (Desktop Only) */}
           <div className="relative hidden lg:flex items-center w-52 xl:w-64 group">
             <span className="material-symbols-outlined absolute left-2.5 text-zinc-400 group-focus-within:text-white text-[15px] pointer-events-none transition-colors">
               search
@@ -3215,10 +3267,16 @@ export default function OpenLyricsSyncEngine() {
             <input
               id="search-lyrics-input"
               type="text"
-              placeholder="Search lyrics  / or ⌘K ..."
+              placeholder="Find in lyrics (Ctrl+F)..."
               value={searchQuery}
+              onFocus={() => {
+                setIsFindOpen(true);
+                if (viewTab !== 'editor' && viewTab !== 'split' && viewTab !== 'timeline') {
+                  setViewTab('editor');
+                }
+              }}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-8 bg-[#141417] hover:bg-[#18181c] focus:bg-[#18181c] border border-white/[0.12] hover:border-white/[0.2] focus:border-white/35 rounded-xl pl-8 pr-8 text-xs text-zinc-100 placeholder:text-zinc-500 font-sans outline-none transition-all"
+              className="w-full h-8 bg-[#141417] hover:bg-[#18181c] focus:bg-[#18181c] border border-white/[0.12] hover:border-white/[0.2] focus:border-white/35 rounded-xl pl-8 pr-12 text-xs text-zinc-100 placeholder:text-zinc-500 font-sans outline-none transition-all"
             />
             {searchQuery ? (
               <button
@@ -3229,9 +3287,19 @@ export default function OpenLyricsSyncEngine() {
                 <span className="material-symbols-outlined text-xs">close</span>
               </button>
             ) : (
-              <div className="absolute right-2 pointer-events-none flex items-center">
-                
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFindOpen((prev) => !prev);
+                  if (viewTab !== 'editor' && viewTab !== 'split' && viewTab !== 'timeline') {
+                    setViewTab('editor');
+                  }
+                }}
+                className="absolute right-2 px-1.5 py-0.5 rounded bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-[10px] font-mono text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                title="Find & Replace (Ctrl+F)"
+              >
+                ⌘F
+              </button>
             )}
           </div>
 
@@ -3429,8 +3497,30 @@ export default function OpenLyricsSyncEngine() {
         >
           {viewTab === 'editor' && (
             <div className="flex-1 flex flex-col overflow-hidden relative h-full">
+              <FindReplaceWidget
+                lines={doc.lines}
+                onUpdateLineText={updateLineText}
+                onBatchReplaceLines={batchReplaceLines}
+                activeLineIndex={activeLineIndex}
+                setActiveLineIndex={setActiveLineIndex}
+                isOpen={isFindOpen}
+                onClose={handleCloseFind}
+                isReplaceExpanded={isReplaceExpanded}
+                onToggleReplace={setIsReplaceExpanded}
+                onMatchesChange={(matches, activeIdx, q, opts) => {
+                  setFindMatches(matches);
+                  setActiveFindMatchIndex(activeIdx);
+                  setFindQuery(q);
+                  setFindOptions(opts);
+                }}
+                onToast={showActionToast}
+              />
               <LyricEditor
-                lines={filteredLines}
+                lines={doc.lines}
+                findMatches={isFindOpen ? findMatches : []}
+                activeFindMatchIndex={isFindOpen ? activeFindMatchIndex : 0}
+                findQuery={isFindOpen ? findQuery : ''}
+                findOptions={findOptions}
                 activeLineIndex={activeLineIndex}
                 setActiveLineIndex={setActiveLineIndex}
                 currentTime={displayTime}
@@ -3544,6 +3634,24 @@ export default function OpenLyricsSyncEngine() {
 
           {viewTab === 'split' && (
             <div className="flex-1 flex flex-col overflow-hidden relative h-full">
+              <FindReplaceWidget
+                lines={doc.lines}
+                onUpdateLineText={updateLineText}
+                onBatchReplaceLines={batchReplaceLines}
+                activeLineIndex={activeLineIndex}
+                setActiveLineIndex={setActiveLineIndex}
+                isOpen={isFindOpen}
+                onClose={handleCloseFind}
+                isReplaceExpanded={isReplaceExpanded}
+                onToggleReplace={setIsReplaceExpanded}
+                onMatchesChange={(matches, activeIdx, q, opts) => {
+                  setFindMatches(matches);
+                  setActiveFindMatchIndex(activeIdx);
+                  setFindQuery(q);
+                  setFindOptions(opts);
+                }}
+                onToast={showActionToast}
+              />
               <div
                 ref={splitContainerRef}
                 className="flex-1 flex overflow-hidden relative z-10 bg-transparent"
@@ -3555,7 +3663,11 @@ export default function OpenLyricsSyncEngine() {
                   }`}
                 >
                   <LyricEditor
-                    lines={filteredLines}
+                    lines={doc.lines}
+                    findMatches={isFindOpen ? findMatches : []}
+                    activeFindMatchIndex={isFindOpen ? activeFindMatchIndex : 0}
+                    findQuery={isFindOpen ? findQuery : ''}
+                    findOptions={findOptions}
                     activeLineIndex={activeLineIndex}
                     setActiveLineIndex={setActiveLineIndex}
                     currentTime={displayTime}
