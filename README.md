@@ -11,7 +11,7 @@ OpenLyryc is a browser studio for timing lyrics. Play a track, paste the words, 
 </div>
 
 <p align="center">
-  <img src="apps/web/public/studio-screenshot.png" alt="OpenLyryc Studio with a waveform and timed lyrics" width="90%" />
+  <img width="1279" height="753" alt="homepage-promo" src="https://github.com/user-attachments/assets/4c4f7438-da3b-4957-9de9-7b1b996aa64f" />
 </p>
 
 ## The short version
